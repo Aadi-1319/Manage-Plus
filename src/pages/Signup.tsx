@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import GoogleSignInButton from "@/components/ui/google-sign-in-button";
 
 const Signup: React.FC = () => {
   const [step, setStep] = useState(1);
@@ -17,6 +18,7 @@ const Signup: React.FC = () => {
     gstNo: '',
     address: '',
   });
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
   const navigate = useNavigate();
@@ -71,6 +73,27 @@ const Signup: React.FC = () => {
     }));
   };
 
+  const handleGoogleSignIn = async () => {
+    setIsGoogleLoading(true);
+    try {
+      // TODO: Implement Google Sign-in logic here
+      // For now, just show a success message
+      toast({
+        title: "Success!",
+        description: "You have successfully signed in with Google.",
+      });
+      navigate("/");
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Could not sign in with Google. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
@@ -87,6 +110,10 @@ const Signup: React.FC = () => {
           </div>
         </CardHeader>
         <CardContent>
+           <GoogleSignInButton
+              onClick={handleGoogleSignIn}
+              isLoading={isGoogleLoading}
+            />
           {step === 1 ? (
             <form onSubmit={handleNext} className="space-y-4">
               <div className="space-y-2">
