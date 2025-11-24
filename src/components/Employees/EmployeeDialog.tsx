@@ -47,7 +47,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
   supervisorId: '',        // added
   joinDate: '',            // added
   status: 'active',        // added
-  company_id: '',           // added
+  company_id: '',
 });
 
 
