@@ -11,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Upload, Download, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from "@/hooks/useAuth";
+
 import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import { z } from 'zod';

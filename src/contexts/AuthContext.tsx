@@ -1,123 +1,162 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { User, Company } from '@/types';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
-interface AuthContextType {
-  user: User | null;
-  company: Company | null;
-  loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  signup: (email: string, password: string, fullName: string, companyName: string, companyDetails?: Partial<Company>) => Promise<void>;
-  logout: () => void;
+// ============================================================
+// TYPES
+// ============================================================
+
+interface SignupData {
+  fullName: string;
+  companyName: string;
+  gstNo?: string;
+  address?: string;
+  role: "owner";
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface AuthContextType {
+  user: any;
+  loading: boolean;
+  signup: (
+    email: string,
+    password: string,
+    data: SignupData
+  ) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+}
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
+export const AuthContext = createContext<AuthContextType | null>(null);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [company, setCompany] = useState<Company | null>(null);
+
+// ============================================================
+// PROVIDER COMPONENT
+// ============================================================
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  // Keep session alive on refresh
   useEffect(() => {
-    // Check for existing session
-    const storedUser = localStorage.getItem('user');
-    const storedCompany = localStorage.getItem('company');
-    
-    if (storedUser && storedCompany) {
-      setUser(JSON.parse(storedUser));
-      setCompany(JSON.parse(storedCompany));
-    }
-    setLoading(false);
+    const getSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+      setLoading(false);
+    };
+
+    getSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_, session) => {
+        setUser(session?.user || null);
+      }
+    );
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
   }, []);
 
-  const login = async (email: string, password: string) => {
-    // Mock login - check localStorage for users
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    const foundUser = users.find((u: User) => u.email === email);
-    
-    if (!foundUser) {
-      throw new Error('Invalid email or password');
-    }
-
-    const companies = JSON.parse(localStorage.getItem('companies') || '[]');
-    const foundCompany = companies.find((c: Company) => c.id === foundUser.companyId);
-
-    setUser(foundUser);
-    setCompany(foundCompany);
-    localStorage.setItem('user', JSON.stringify(foundUser));
-    localStorage.setItem('company', JSON.stringify(foundCompany));
-  };
-
+  // ============================================================
+  // SIGNUP (OWNER ONLY)
+  // ============================================================
   const signup = async (
     email: string,
     password: string,
-    fullName: string,
-    companyName: string,
-    companyDetails?: Partial<Company>
+    data: SignupData
   ) => {
-    const users = JSON.parse(localStorage.getItem('users') || '[]');
-    
-    if (users.find((u: User) => u.email === email)) {
-      throw new Error('Email already exists');
-    }
-
-    const companyId = `company_${Date.now()}`;
-    const userId = `user_${Date.now()}`;
-
-    // Set subscription to 30 days from now
-    const subscriptionEndDate = new Date();
-    subscriptionEndDate.setDate(subscriptionEndDate.getDate() + 30);
-
-    const newCompany: Company = {
-      id: companyId,
-      name: companyName,
-      ownerId: userId,
-      gstNo: companyDetails?.gstNo,
-      address: companyDetails?.address,
-      subscriptionEndDate: subscriptionEndDate.toISOString(),
-      subscriptionStatus: 'active',
-      createdAt: new Date().toISOString(),
-    };
-
-    const newUser: User = {
-      id: userId,
+    // 1️⃣ Create Supabase Auth User
+    const {
+      data: { user },
+      error: signupError,
+    } = await supabase.auth.signUp({
       email,
-      fullName,
-      role: 'OWNER',
-      companyId,
-      createdAt: new Date().toISOString(),
-    };
+      password,
+    });
 
-    const companies = JSON.parse(localStorage.getItem('companies') || '[]');
-    companies.push(newCompany);
-    users.push(newUser);
+    if (signupError) throw signupError;
 
-    localStorage.setItem('companies', JSON.stringify(companies));
-    localStorage.setItem('users', JSON.stringify(users));
-    localStorage.setItem('user', JSON.stringify(newUser));
-    localStorage.setItem('company', JSON.stringify(newCompany));
+    if (!user) throw new Error("Signup failed — no user returned.");
 
-    setUser(newUser);
-    setCompany(newCompany);
+    const ownerId = user.id;
+
+    // 2️⃣ Insert Company
+    const { data: companyRow, error: companyError } = await supabase
+      .from("company")
+      .insert([
+        {
+          company_name: data.companyName,
+          gst_no: data.gstNo || null,
+          address: data.address || null,
+        },
+      ])
+      .select()
+      .single();
+
+    if (companyError) throw companyError;
+
+    const companyId = companyRow.company_id;
+
+    // 3️⃣ Insert Owner row
+    const { error: ownerInsertError } = await supabase
+      .from("owner")
+      .insert([
+        {
+          owner_id: ownerId,
+          company_id: companyId,
+          full_name: data.fullName,
+        },
+      ]);
+
+    if (ownerInsertError) throw ownerInsertError;
+
+    // 4️⃣ Update user metadata (VERY IMPORTANT for RLS)
+    const { error: metadataError } = await supabase.auth.updateUser({
+      data: {
+        role: "owner",
+        company_id: companyId,
+      },
+    });
+
+    if (metadataError) throw metadataError;
   };
 
-  const logout = () => {
-    setUser(null);
-    setCompany(null);
-    localStorage.removeItem('user');
-    localStorage.removeItem('company');
+  // ============================================================
+  // LOGIN
+  // ============================================================
+  const login = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) throw error;
   };
 
+  // ============================================================
+  // LOGOUT
+  // ============================================================
+  const logout = async () => {
+    await supabase.auth.signOut();
+  };
+
+  // ============================================================
+  // FINAL PROVIDER RETURN
+  // ============================================================
   return (
-    <AuthContext.Provider value={{ user, company, loading, login, signup, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        signup,
+        login,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
+
