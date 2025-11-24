@@ -93,6 +93,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
 
     const payload = {
   full_name: formData.name,
+  // full_name: formData.name,
   aadhar: formData.aadhar,
   pan: formData.pan,
   employment_type: formData.type,
