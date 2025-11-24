@@ -19,11 +19,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+// ✅ Import Supabase directly here
+import { supabase } from "@/lib/supabaseClient";
+
 interface EmployeeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   employee: Employee | null;
-  onSave: (employee: Partial<Employee>) => void;
+  onSave: () => void; // we update this
 }
 
 const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
@@ -60,9 +63,40 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
     }
   }, [employee, open]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // ✅ Supabase insert/update happens here
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+
+    const dataToSave = {
+      ...formData,
+      salary: formData.type === "FIXED" ? formData.salary : null,
+      dailyRate: formData.type === "DAILY" ? formData.dailyRate : null,
+    };
+
+    try {
+      if (employee?.id) {
+        // ✅ Update employee
+        const { error } = await supabase
+          .from("employee")
+          .update(dataToSave)
+          .eq("id", employee.id);
+
+        if (error) throw error;
+      } else {
+        // ✅ Insert employee
+        const { error } = await supabase
+          .from("employee")
+          .insert([dataToSave]);
+
+        if (error) throw error;
+      }
+
+      onSave();            // refresh parent list
+      onOpenChange(false); // close dialog
+
+    } catch (err: any) {
+      alert("Supabase Error: " + err.message);
+    }
   };
 
   const handleChange = (field: keyof Employee, value: any) => {
@@ -81,6 +115,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
+            
             <div className="space-y-2">
               <Label htmlFor="name">Full Name *</Label>
               <Input
@@ -132,11 +167,11 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
               <Label htmlFor="type">Employment Type *</Label>
               <Select
                 value={formData.type}
-                onValueChange={(value: EmployeeType) => handleChange('type', value)}
+                onValueChange={(value: EmployeeType) =>
+                  handleChange('type', value)
+                }
               >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="FIXED">Fixed Salary</SelectItem>
                   <SelectItem value="DAILY">Daily Wage</SelectItem>
@@ -151,7 +186,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
                   id="salary"
                   type="number"
                   value={formData.salary}
-                  onChange={(e) => handleChange('salary', parseFloat(e.target.value))}
+                  onChange={(e) => handleChange('salary', parseInt(e.target.value))}
                   required
                 />
               </div>
@@ -162,7 +197,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
                   id="dailyRate"
                   type="number"
                   value={formData.dailyRate}
-                  onChange={(e) => handleChange('dailyRate', parseFloat(e.target.value))}
+                  onChange={(e) => handleChange('dailyRate', parseInt(e.target.value))}
                   required
                 />
               </div>
