@@ -181,8 +181,6 @@
 // };
 
 
-// 🔥 CLEAN AUTH CONTEXT (NO OWNER/COMPANY INSERT HERE)
-
 import React, { createContext, useEffect, useState, ReactNode } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useNavigate } from "react-router-dom";
@@ -197,12 +195,13 @@ interface SignupData {
 
 interface AuthContextType {
   user: any;
-  company: any;
   loading: boolean;
+  role: string | null;
+  company: any;
   signup: (...args: any) => Promise<void>;
   login: (...args: any) => Promise<any>;
   logout: () => Promise<void>;
-  setCompany: (data: any) => void;   // <-- ADD THIS
+  setCompany: (data: any) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
@@ -210,37 +209,101 @@ export const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
+  const [role, setRole] = useState<string | null>(null);
   const [company, setCompany] = useState<any>(null);
 
+  const navigate = useNavigate();
 
-  // Restore session on refresh
+  // ---------------------------------------
+  // Fetch Role (OWNER / SUPERVISOR)
+  // ---------------------------------------
+  const fetchRole = async (uid: string) => {
+    // Check OWNER
+    let { data: owner } = await supabase
+      .from("owner")
+      .select("role, company_id")
+      .eq("owner_id", uid)
+      .single();
+    if (owner) {
+      setRole(owner.role);
+      return owner.company_id;
+    }
+
+    // Check SUPERVISOR
+    let { data: sup } = await supabase
+      .from("supervisor")
+      .select("role, company_id")
+      .eq("supervisor_id", uid)
+      .single();
+    if (sup) {
+      setRole(sup.role);
+      return sup.company_id;
+    }
+
+    setRole(null);
+    return null;
+  };
+
+  // ---------------------------------------
+  // Fetch Company Details
+  // ---------------------------------------
+  const fetchCompany = async (companyId: number) => {
+    const { data, error } = await supabase
+      .from("company")
+      .select("*")
+      .eq("company_id", companyId)
+      .single();
+
+    if (!error) {
+      setCompany(data);
+    }
+  };
+
+  // ---------------------------------------
+  // Restore Session & Fetch Role + Company
+  // ---------------------------------------
   useEffect(() => {
     const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      setUser(session?.user || null);
+      const currentUser = session?.user || null;
+
+      setUser(currentUser);
+
+      if (currentUser) {
+        const companyId = await fetchRole(currentUser.id);
+        if (companyId) await fetchCompany(companyId);
+      }
+
       setLoading(false);
     };
 
     init();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_, session) => setUser(session?.user || null)
+      async (_, session) => {
+        const currentUser = session?.user || null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          const companyId = await fetchRole(currentUser.id);
+          if (companyId) await fetchCompany(companyId);
+        }
+      }
     );
 
     return () => listener?.subscription.unsubscribe();
   }, []);
 
-  // -------------------------
-  // SIGNUP ONLY (NO INSERT)
-  // -------------------------
+  // ---------------------------------------
+  // SIGNUP
+  // ---------------------------------------
   const signup = async (email: string, password: string, data: SignupData) => {
     setLoading(true);
 
     const { error } = await supabase.auth.signUp({
       email: email.trim().toLowerCase(),
       password,
-      options: { data }
+      options: { data },
     });
 
     if (error) {
@@ -249,43 +312,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     alert("Please verify your email before logging in.");
+    navigate("/verify");
     setLoading(false);
-    navigate("/login");
   };
 
-  // -------------------------
-  // LOGIN ONLY (NO INSERT)
-  // -------------------------
+  // ---------------------------------------
+  // LOGIN
+  // ---------------------------------------
   const login = async (email: string, password: string) => {
     setLoading(true);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
-      password,
-    });
+    const { data: { user: loggedInUser }, error } =
+      await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
 
     if (error) {
       setLoading(false);
       throw error;
     }
 
-    setUser(data.user);
+    setUser(loggedInUser);
+
+    // Fetch role & company after login
+    const companyId = await fetchRole(loggedInUser.id);
+    if (companyId) await fetchCompany(companyId);
+
     setLoading(false);
-    return data.user; // return user info to Login page logic
+    return loggedInUser;
   };
 
-  // -------------------------
+  // ---------------------------------------
   // LOGOUT
-  // -------------------------
+  // ---------------------------------------
   const logout = async () => {
     setLoading(true);
     await supabase.auth.signOut();
     setUser(null);
+    setRole(null);
+    setCompany(null);
     setLoading(false);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signup, login, logout,setCompany }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        role,
+        company,
+        signup,
+        login,
+        logout,
+        setCompany,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -7,6 +7,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import DashboardLayout from "@/components/Layout/DashboardLayout";
 import Login from "@/pages/Login";
 import Signup from "@/pages/Signup";
+import VeriLoader from "./contexts/veriLoader";
 import Dashboard from "@/pages/Dashboard";
 import Employees from "@/pages/Employees";
 import Supervisors from "@/pages/Supervisors";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/verify" element={<VeriLoader />} />
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/employees" element={<Employees />} />

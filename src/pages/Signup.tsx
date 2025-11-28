@@ -54,12 +54,12 @@ const Signup: React.FC = () => {
         }
       );
 
-      toast({
-        title: 'Account created!',
-        description: 'Your company has been registered successfully.',
-      });
+      // toast({
+      //   title: 'Account created!',
+      //   description: 'Your company has been registered successfully.',
+      // });
 
-      navigate('/login');
+      // navigate('/login');
 
     } catch (error) {
       toast({

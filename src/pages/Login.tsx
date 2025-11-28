@@ -35,13 +35,14 @@ const handleSubmit = async (e: React.FormEvent) => {
 
     // 2️⃣ CHECK EMAIL VERIFIED
     if (!loggedUser.email_confirmed_at) {
-      toast({
-        title: "Verify your email",
-        description: "Please verify your email before logging in."
-      });
-      setLoading(false);
-      return;
-    }
+  toast({
+    title: "Verify your email",
+    description: "Please verify your email before logging in."
+  });
+  setLoading(false);
+  return;
+}
+
 
     // 3️⃣ CHECK IF OWNER ALREADY EXISTS
     const { data: existingOwner } = await supabase
@@ -102,7 +103,7 @@ const handleSubmit = async (e: React.FormEvent) => {
   } catch (error) {
     toast({
       title: "Login failed",
-      description: error instanceof Error ? error.message : "Invalid credentials",
+      description: error instanceof Error ? error.message : "Invalid credentials or System Error",
       variant: "destructive",
     });
   }

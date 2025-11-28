@@ -17,7 +17,7 @@ import {
 import { cn } from '@/lib/utils';
 
 const Sidebar: React.FC = () => {
-  const { user, logout } = useAuth();
+  const { user,role,logout } = useAuth();
   const location = useLocation();
 
   const navItems = [
@@ -32,15 +32,16 @@ const Sidebar: React.FC = () => {
     { icon: Shield, label: 'Admin Panel', path: '/admin', roles: ['ADMIN'] },
   ];
 
+  console.log(user?.role)
   const filteredNavItems = navItems.filter(item => 
-    item.roles.includes(user?.role || 'SUPERVISOR')
+    item.roles.includes(role || 'SUPERVISOR')
   );
 
   return (
     <aside className="w-64 bg-sidebar-background border-r border-sidebar-border flex flex-col">
       <div className="p-6 border-b border-sidebar-border">
         <h1 className="text-2xl font-bold text-primary">Manage-plus</h1>
-        <p className="text-sm text-muted-foreground mt-1">{user?.role}</p>
+        <p className="text-sm text-muted-foreground mt-1">{role} - {user.full_name}</p>
       </div>
 
       <nav className="flex-1 p-4 space-y-1">
