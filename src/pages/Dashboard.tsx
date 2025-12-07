@@ -7,7 +7,7 @@ import { Employee, Attendance } from '@/types';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const Dashboard: React.FC = () => {
-  const { user, company } = useAuth();
+  const { user ,role,company } = useAuth();
   const [stats, setStats] = useState({
     totalEmployees: 0,
     presentToday: 0,
@@ -35,7 +35,7 @@ const Dashboard: React.FC = () => {
     // Filter employees based on user role
     let relevantEmployees = employees.filter(e => e.companyId === company?.id && e.status === 'active');
     
-    if (user?.role === 'SUPERVISOR') {
+    if (role === 'SUPERVISOR') {
       // Supervisors only see their assigned employees
       relevantEmployees = relevantEmployees.filter(e => e.supervisorId === user.id);
     }
@@ -80,7 +80,7 @@ const Dashboard: React.FC = () => {
       color: 'text-destructive',
       bgColor: 'bg-destructive/10',
     },
-    ...(user?.role === 'OWNER' ? [{
+    ...(role === 'OWNER' ? [{
       title: 'Supervisors',
       value: stats.totalSupervisors,
       icon: UserCog,
@@ -112,7 +112,7 @@ const Dashboard: React.FC = () => {
             Welcome back, {user?.fullName}
           </p>
         </div>
-        {user?.role === 'OWNER' && (
+        {role === 'OWNER' && (
           <Card className="bg-gradient-to-br from-primary/10 to-secondary/10 border-primary/20">
             <CardContent className="p-4">
               <div className="flex items-center gap-3">

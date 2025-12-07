@@ -8,25 +8,23 @@ import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const DashboardLayout: React.FC = () => {
-const { user,loading,company } = useAuth(); 
+const { user,role,loading,company } = useAuth(); 
  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     if (!loading) {
-      const timer = setTimeout(() => {
-        setShowSplash(false);
-      }, 500);
+      const timer = setTimeout(() => setShowSplash(false), 500);
       return () => clearTimeout(timer);
     }
   }, [loading]);
 
-  if (loading || showSplash) {
-    return <SplashScreen />;
-  }
+  
+if (loading || showSplash) {
+  return <SplashScreen />;
+}
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
+if (!user) return <Navigate to="/login" replace />;
+
 
   // Check subscription status
   const isSubscriptionExpired = company?.subscriptionStatus === 'expired' || 
