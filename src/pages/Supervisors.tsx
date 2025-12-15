@@ -9,7 +9,7 @@ import SupervisorTable from '@/components/Supervisors/SupervisorTable';
 import SupervisorDialog from '@/components/Supervisors/SupervisorDialog';
 
 const Supervisors: React.FC = () => {
-  const { company, user } = useAuth();
+  const { company, user,role } = useAuth();
   const [supervisors, setSupervisors] = useState<User[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -58,7 +58,7 @@ const Supervisors: React.FC = () => {
     setDialogOpen(false);
   };
 
-  if (user?.role !== 'OWNER') {
+  if (role !== 'OWNER') {
     return (
       <div className="flex items-center justify-center h-96">
         <p className="text-muted-foreground">You don't have permission to view this page</p>

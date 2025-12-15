@@ -32,7 +32,6 @@ const Sidebar: React.FC = () => {
     { icon: Shield, label: 'Admin Panel', path: '/admin', roles: ['ADMIN'] },
   ];
 
-  console.log(user?.role)
   const filteredNavItems = navItems.filter(item => 
     item.roles.includes(role || 'SUPERVISOR')
   );

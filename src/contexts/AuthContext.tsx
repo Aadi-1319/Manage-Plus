@@ -1,6 +1,11 @@
-import React, { createContext, useEffect, useState, ReactNode } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useNavigate } from "react-router-dom";
 
 interface SignupData {
   fullName: string;
@@ -12,134 +17,146 @@ interface SignupData {
 
 interface AuthContextType {
   user: any;
-  loading: boolean;
   role: string | null;
   company: any;
-  signup: (...args: any) => Promise<void>;
-  login: (...args: any) => Promise<any>;
+  loading: boolean;
+  login: (email: string, password: string) => Promise<any>;
+  signup: (email: string, password: string, data: SignupData) => Promise<void>;
   logout: () => Promise<void>;
-  setCompany: (data: any) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [company, setCompany] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const navigate = useNavigate();
+  /* ----------------------------- HELPERS ----------------------------- */
 
-  // ---------------------------------------
-  // Fetch Role (OWNER / SUPERVISOR)
-  // ---------------------------------------
   const fetchRole = async (uid: string) => {
-    // Check OWNER
-    let { data: owner } = await supabase
+    console.log("➡️ fetchRole:", uid);
+
+    const { data: owner } = await supabase
       .from("owner")
-      .select("role, company_id")
+      .select("company_id")
       .eq("owner_id", uid)
-      .single();
+      .maybeSingle();
+
     if (owner) {
-      setRole(owner.role);
+      setRole("OWNER");
       return owner.company_id;
     }
 
-    // Check SUPERVISOR
-    let { data: sup } = await supabase
+    const { data: supervisor } = await supabase
       .from("supervisor")
-      .select("role, company_id")
+      .select("company_id")
       .eq("supervisor_id", uid)
-      .single();
-    if (sup) {
-      setRole(sup.role);
-      return sup.company_id;
+      .maybeSingle();
+
+    if (supervisor) {
+      setRole("SUPERVISOR");
+      return supervisor.company_id;
     }
 
     setRole(null);
     return null;
   };
 
-  // ---------------------------------------
-  // Fetch Company Details
-  // ---------------------------------------
   const fetchCompany = async (companyId: number) => {
-    const { data, error } = await supabase
+    console.log("🏢 fetchCompany:", companyId);
+
+    const { data } = await supabase
       .from("company")
       .select("*")
       .eq("company_id", companyId)
       .single();
 
-    if (!error) {
-      setCompany(data);
-    }
+    setCompany(data);
   };
 
-  // ---------------------------------------
-  // Restore Session & Fetch Role + Company
-  // ---------------------------------------
+  const ensureOwnerAndCompany = async (user: any) => {
+    console.log("🧩 ensureOwnerAndCompany");
+
+    console.log("🔍 Checking owner...");
+
+    const { data: owner } = await supabase
+      .from("owner")
+      .select("company_id")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+      console.log("📦 Owner result:", owner);
+
+    if (owner) return owner.company_id;
+
+    const meta = user.user_metadata;
+
+    console.log("🔍 Creating company and owner...");
+
+    const { data: company, error: compErr } = await supabase
+      .from("company")
+      .insert({
+        company_name: meta.companyName,
+        gst_no: meta.gstNo || null,
+        address: meta.address || null,
+      })
+      .select()
+      .single();
+
+      console.log("📦 Company result:", company, compErr);
+
+    if (compErr) throw compErr;
+
+    const { error: ownerErr } = await supabase.from("owner").insert({
+      owner_id: user.id,
+      company_id: company.company_id,
+      full_name: meta.fullName,
+      email: user.email,
+      phone: meta.phone || null,
+    });
+
+    if (ownerErr) throw ownerErr;
+
+    return company.company_id;
+  };
+
+  /* ----------------------------- AUTH LISTENER ----------------------------- */
+
   useEffect(() => {
-  console.log("AUTH INIT START");
-  const init = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    console.log("SESSION:", session);
+    console.log("🚀 AUTH LISTENER INITIALIZED");
 
-    const currentUser = session?.user || null;
-    setUser(currentUser);
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log("🔔 AUTH EVENT:", event);
 
-    if (currentUser) {
-      console.log("Fetching role...");
-      const companyId = await fetchRole(currentUser.id);
-      console.log("companyId:", companyId);
-
-      if (companyId) {
-        console.log("Fetching company...");
-        await fetchCompany(companyId);
+        if (!session?.user) {
+          setUser(null);
+          setRole(null);
+          setCompany(null);
+          setLoading(false);
+          return;
+        }
+        
+        fetchRole(session.user.id).then(fetchCompany);
+        setUser(session.user);
+        setLoading(false);
       }
-    }
+    );
 
-    console.log("DONE → setLoading(false)");
-    setLoading(false);
-  };
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
-  init();
+  /* ----------------------------- LOGIN ----------------------------- */
 
-  const { data: listener } = supabase.auth.onAuthStateChange(
-    async (_, session) => {
-      console.log("AUTH STATE CHANGE:", session);
-
-      const currentUser = session?.user || null;
-      setUser(currentUser);
-
-      if (currentUser) {
-        const companyId = await fetchRole(currentUser.id);
-        if (companyId) await fetchCompany(companyId);
-      } else {
-        setRole(null);
-        setCompany(null);
-      }
-
-      console.log("DONE LISTENER → setLoading(false)");
-      setLoading(false);
-    }
-  );
-
-  return () => listener?.subscription.unsubscribe();
-}, []);
-
-
-
-  // ---------------------------------------
-  // SIGNUP
-  // ---------------------------------------
-  const signup = async (email: string, password: string, data: SignupData) => {
+  const login = async (email: string, password: string) => {
+    console.log("🔐 LOGIN start:", email);
     setLoading(true);
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
-      options: { data },
     });
 
     if (error) {
@@ -147,64 +164,139 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw error;
     }
 
-    alert("Please verify your email before logging in.");
-    navigate("/verify");
-    setLoading(false);
-  };
+    user = data.user;
 
-  // ---------------------------------------
-  // LOGIN
-  // ---------------------------------------
-  const login = async (email: string, password: string) => {
-    setLoading(true);
-
-    const { data: { user: loggedInUser }, error } =
-      await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password,
-      });
-
-    if (error) {
+    if (!user.email_confirmed_at) {
       setLoading(false);
-      throw error;
+      throw new Error("Please verify your email before logging in.");
     }
 
-    setUser(loggedInUser);
+    setUser(user);
 
-    // Fetch role & company after login
-    const companyId = await fetchRole(loggedInUser.id);
-    if (companyId) await fetchCompany(companyId);
+    const companyId = await ensureOwnerAndCompany(user);
+    const roleCompanyId = await fetchRole(user.id);
+
+    if (roleCompanyId) {
+      await fetchCompany(roleCompanyId);
+    }
 
     setLoading(false);
-    return loggedInUser;
+    console.log("✅ LOGIN COMPLETE");
+    return user;
   };
+/* ----------------------------- SIGNUP ----------------------------- */
+const signup = async (
+  email: string,
+  password: string,
+  data: {
+    fullName: string;
+    phone?: string;
+    companyName: string;
+    gstNo?: string;
+    address?: string;
+  }
+) => {
+  setLoading(true);
+  console.log("🆕 SIGNUP start:", email);
 
-  // ---------------------------------------
-  // LOGOUT
-  // ---------------------------------------
+  try {
+    // 1️⃣ Create Auth User
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: email.trim().toLowerCase(),
+      password,
+    });
+
+    if (authError || !authData.user) {
+      throw authError || new Error("Auth user creation failed");
+    }
+
+    const userId = authData.user.id;
+    console.log("✅ Auth user created:", userId);
+
+    // 2️⃣ Insert Company only if not exists
+    let companyId: string;
+    const { data: existingCompany } = await supabase
+      .from('company')
+      .select('*')
+      .eq('company_name', data.companyName)
+      .maybeSingle();
+
+    if (existingCompany) {
+      companyId = existingCompany.company_id;
+      console.log("🏢 Company already exists:", companyId);
+    } else {
+      const { data: newCompany, error: companyError } = await supabase
+        .from('company')
+        .insert({
+          company_name: data.companyName,
+          gst_no: data.gstNo || null,
+          address: data.address || null,
+        })
+        .select()
+        .single();
+
+      if (companyError) throw companyError;
+
+      companyId = newCompany.company_id;
+      console.log("🏢 Company created:", companyId);
+    }
+
+    // 3️⃣ Insert Owner only if not exists
+    const { data: existingOwner } = await supabase
+      .from('owner')
+      .select('*')
+      .eq('owner_id', userId)
+      .maybeSingle();
+
+    if (existingOwner) {
+      console.log("👑 Owner already exists");
+    } else {
+      const { data: newOwner, error: ownerError } = await supabase
+        .from('owner')
+        .insert({
+          owner_id: userId,
+          company_id: companyId,
+          full_name: data.fullName,
+          email: email.trim().toLowerCase(),
+          phone: data.phone || null,
+        })
+        .select()
+        .maybeSingle();
+
+      if (ownerError) throw ownerError;
+      console.log("👑 Owner created:", newOwner);
+    }
+
+    console.log("🎉 Signup complete for:", email);
+  } catch (error) {
+    console.error("Signup error:", error);
+    throw error;
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+  /* ----------------------------- LOGOUT ----------------------------- */
+
   const logout = async () => {
-    setLoading(true);
     await supabase.auth.signOut();
     setUser(null);
     setRole(null);
     setCompany(null);
-    setLoading(false);
   };
 
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        role,
-        company,
-        signup,
-        login,
-        logout,
-        setCompany,
-      }}
+      value={{ user, role, company, loading, login, signup, logout }}
     >
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
+  return ctx;
 };
