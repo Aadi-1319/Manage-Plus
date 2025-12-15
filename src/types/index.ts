@@ -5,12 +5,13 @@ export type EmployeeType = 'FIXED' | 'DAILY';
 export type AttendanceStatus = 'P' | 'A';
 
 export interface User {
-  id: string;
+  supervisor_id: string;
   email: string;
   fullName: string;
   role: UserRole;
   companyId: string;
   aadhar?: string;
+  phone?: string;
   pan?: string;
   address?: string;
   createdAt: string;

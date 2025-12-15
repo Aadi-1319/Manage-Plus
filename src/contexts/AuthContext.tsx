@@ -164,7 +164,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw error;
     }
 
-    user = data.user;
+    const user = data.user;
 
     if (!user.email_confirmed_at) {
       setLoading(false);

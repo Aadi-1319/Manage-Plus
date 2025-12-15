@@ -42,7 +42,7 @@ const SupervisorTable: React.FC<SupervisorTableProps> = ({ supervisors, onDelete
         <TableRow>
           <TableHead>Name</TableHead>
           <TableHead>Email</TableHead>
-          <TableHead>Aadhar</TableHead>
+          <TableHead>Phone</TableHead>
           <TableHead>PAN</TableHead>
           <TableHead>Address</TableHead>
           <TableHead>Created At</TableHead>
@@ -54,12 +54,12 @@ const SupervisorTable: React.FC<SupervisorTableProps> = ({ supervisors, onDelete
           <TableRow key={supervisor.id}>
             <TableCell className="font-medium">{supervisor.fullName}</TableCell>
             <TableCell>{supervisor.email}</TableCell>
-            <TableCell>{supervisor.aadhar || '-'}</TableCell>
+            <TableCell>{supervisor.phone || '-'}</TableCell>
             <TableCell>{supervisor.pan || '-'}</TableCell>
             <TableCell className="max-w-[200px] truncate">{supervisor.address || '-'}</TableCell>
             <TableCell>{new Date(supervisor.createdAt).toLocaleDateString()}</TableCell>
             <TableCell className="text-right">
-              <AlertDialog>
+              <AlertDialog key={`delete-${supervisor.id}`}>
                 <AlertDialogTrigger asChild>
                   <Button variant="ghost" size="icon">
                     <Trash2 className="w-4 h-4" />
@@ -74,7 +74,7 @@ const SupervisorTable: React.FC<SupervisorTableProps> = ({ supervisors, onDelete
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => onDelete(supervisor.id)}>
+                    <AlertDialogAction onClick={() => onDelete(supervisor.supervisor_id)}>
                       Delete
                     </AlertDialogAction>
                   </AlertDialogFooter>

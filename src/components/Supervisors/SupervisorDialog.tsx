@@ -26,31 +26,35 @@ const SupervisorDialog: React.FC<SupervisorDialogProps> = ({
   onSave,
 }) => {
   const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    aadhar: '',
-    pan: '',
-    address: '',
-  });
+  fullName: '',
+  email: '',
+  phone: '',
+  aadhar: '',
+  pan: '',
+  address: '',
+});
+
   const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      onSave(formData);
-      setFormData({ fullName: '', email: '', aadhar: '', pan: '', address: '' });
-      toast({
-        title: 'Supervisor added',
-        description: 'The supervisor has been added successfully.',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to add supervisor',
-        variant: 'destructive',
-      });
-    }
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  try {
+    await onSave(formData);
+    setFormData({ fullName: '', email: '', phone: '', aadhar: '', pan: '', address: '' });
+    toast({
+      title: 'Supervisor added',
+      description: 'The supervisor has been added successfully.',
+    });
+  } catch (error) {
+    toast({
+      title: 'Error',
+      description:
+        error instanceof Error ? error.message : 'Failed to add supervisor',
+      variant: 'destructive',
+    });
+  }
+};
+
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -87,6 +91,18 @@ const SupervisorDialog: React.FC<SupervisorDialogProps> = ({
               required
             />
           </div>
+
+          <div className="space-y-2">
+           <Label htmlFor="phone">Phone Number</Label>
+           <Input
+              id="phone"
+              value={formData.phone}
+              onChange={(e) => handleChange('phone', e.target.value)}
+              placeholder="10-digit mobile number"
+              maxLength={10}
+            />
+          </div>
+
 
           <div className="space-y-2">
             <Label htmlFor="aadhar">Aadhar Number</Label>

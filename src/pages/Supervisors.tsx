@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from '@/lib/supabaseClient';
 
 import { User } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -13,50 +14,92 @@ const Supervisors: React.FC = () => {
   const [supervisors, setSupervisors] = useState<User[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  useEffect(() => {
+ useEffect(() => {
+  if (company?.company_id) {
     loadSupervisors();
-  }, [company]);
+  }
+}, [company?.company_id]);
 
-  const loadSupervisors = () => {
-    const allUsers: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const companySupervisors = allUsers.filter(
-      u => u.role === 'SUPERVISOR' && u.companyId === company?.id
-    );
-    setSupervisors(companySupervisors);
-  };
 
-  const handleDelete = (id: string) => {
-    const allUsers: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const updated = allUsers.filter(u => u.id !== id);
-    localStorage.setItem('users', JSON.stringify(updated));
-    loadSupervisors();
-  };
+ const loadSupervisors = async () => {
+  if (!company?.company_id) return;
+  console.log("compnay :",company)
+  const { data, error } = await supabase
+    .from('supervisor')
+    .select('*')
+    .eq('company_id', company.company_id)
+    .order('created_at', { ascending: false });
 
-  const handleSave = (supervisor: Partial<User>) => {
-    const allUsers: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    
-    if (allUsers.find(u => u.email === supervisor.email)) {
-      throw new Error('Email already exists');
-    }
+  if (error) {
+    console.error(error);
+    return;
+  }
 
-    const newSupervisor: User = {
-      id: `user_${Date.now()}`,
-      email: supervisor.email!,
-      fullName: supervisor.fullName!,
+  setSupervisors(
+    data.map(s => ({
+      supervisor_id: s.supervisor_id,
+      fullName: s.full_name,
+      email: s.email,
       role: 'SUPERVISOR',
-      companyId: company!.id,
+      phone: s.phone,
+      companyId: s.company_id,
+      aadhar: s.aadhar,
+      pan: s.pan,
+      address: s.address,
+      createdAt: s.created_at,
+    }))
+  );
+};
+
+
+ const handleDelete = async (supervisor_id?: string) => {
+  if (!supervisor_id) {
+    console.error('Delete called with invalid id:', supervisor_id);
+    return;
+  }
+
+  const { error } = await supabase
+    .from('supervisor')
+    .delete()
+    .eq('supervisor_id', supervisor_id);
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  await loadSupervisors(); // ✅ INSIDE async function
+};
+
+
+
+  const handleSave = async (supervisor: Partial<User>) => {
+    console.log(company.company_id)
+  if (!company?.company_id) throw new Error('Company not found');
+
+  const { error } = await supabase
+    .from('supervisor')
+    .insert({
+      full_name: supervisor.fullName,
+      email: supervisor.email,
+      company_id: company.company_id,
+      phone: supervisor.phone,
       aadhar: supervisor.aadhar,
       pan: supervisor.pan,
       address: supervisor.address,
-      createdAt: new Date().toISOString(),
-    };
+    });
 
-    allUsers.push(newSupervisor);
-    localStorage.setItem('users', JSON.stringify(allUsers));
-    
-    loadSupervisors();
-    setDialogOpen(false);
-  };
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('Email already exists');
+    }
+    throw error;
+  }
+
+  await loadSupervisors();
+  setDialogOpen(false);
+};
+
 
   if (role !== 'OWNER') {
     return (
