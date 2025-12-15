@@ -64,19 +64,19 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({
       <TableBody>
         {employees.map((employee) => (
           <TableRow key={employee.id}>
-            <TableCell className="font-medium">{employee.name}</TableCell>
+            <TableCell className="font-medium">{employee.full_name}</TableCell>
             <TableCell>{employee.mobile}</TableCell>
             <TableCell>
-              <Badge variant={employee.type === 'FIXED' ? 'default' : 'secondary'}>
-                {employee.type}
+              <Badge variant={employee.employment_type === 'FIXED' ? 'default' : 'secondary'}>
+                {employee.employment_type}
               </Badge>
             </TableCell>
             <TableCell>
-              {employee.type === 'FIXED'
-                ? `₹${employee.salary?.toLocaleString()}/month`
-                : `₹${employee.dailyRate}/day`}
+              {employee.employment_type === 'FIXED'
+                ? `₹${employee.monthly_salary?.toLocaleString()}/month`
+                : `₹${employee.daily_rate}/day`}
             </TableCell>
-            <TableCell>{new Date(employee.joinDate).toLocaleDateString()}</TableCell>
+            <TableCell>{new Date(employee.join_date).toLocaleDateString()}</TableCell>
             <TableCell>
               <Badge variant={employee.status === 'active' ? 'default' : 'outline'}>
                 {employee.status}
@@ -113,7 +113,7 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({
                           <AlertDialogHeader>
                             <AlertDialogTitle>Delete Employee</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to delete {employee.name}? This action cannot be undone.
+                              Are you sure you want to delete {employee.full_name}? This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

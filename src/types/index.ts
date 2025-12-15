@@ -37,18 +37,17 @@ export interface Supervisor {
 }
 
 export interface Employee {
-  employee_id:string;
   id: string;
-  name: string;
+  full_name: string;
   mobile: string;
   aadhar?: string;
   pan?: string;
   address?: string;
-  type: EmployeeType;
-  salary?: number;
-  dailyRate?: number;
+  employment_type: EmployeeType;
+  monthly_salary?: number;
+  daily_rate?: number;
   supervisorId?: string;
-  joinDate: string;
+  join_date: string;
   status: 'active' | 'inactive';
   companyId: string;
 }

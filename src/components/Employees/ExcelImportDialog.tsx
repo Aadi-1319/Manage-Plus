@@ -151,16 +151,16 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
           // Create employee object
           const newEmployee: Employee = {
             id: `emp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            name: validatedData.name,
+            full_name: validatedData.name,
             mobile: validatedData.mobile,
             aadhar: validatedData.aadhar || undefined,
             pan: validatedData.pan || undefined,
             address: validatedData.address || undefined,
-            type: validatedData.type as EmployeeType,
-            salary: validatedData.salary,
-            dailyRate: validatedData.dailyRate,
+            employment_type: validatedData.type as EmployeeType,
+            monthly_salary: validatedData.salary,
+            daily_rate: validatedData.dailyRate,
             supervisorId: validatedData.supervisorId || undefined,
-            joinDate: validatedData.joinDate,
+            join_date: validatedData.joinDate,
             status: 'active',
             companyId: company.id,
           };

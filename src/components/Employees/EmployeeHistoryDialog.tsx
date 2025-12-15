@@ -81,7 +81,7 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
                 <User className="w-4 h-4 text-muted-foreground" />
                 <div>
                   <p className="text-sm text-muted-foreground">Name</p>
-                  <p className="font-medium">{employee.name}</p>
+                  <p className="font-medium">{employee.full_name}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
                 <Calendar className="w-4 h-4 text-muted-foreground" />
                 <div>
                   <p className="text-sm text-muted-foreground">Join Date</p>
-                  <p className="font-medium">{new Date(employee.joinDate).toLocaleDateString()}</p>
+                  <p className="font-medium">{new Date(employee.join_date).toLocaleDateString()}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -130,9 +130,9 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
                 <div>
                   <p className="text-sm text-muted-foreground">Type & Pay</p>
                   <p className="font-medium">
-                    {employee.type === 'FIXED'
-                      ? `₹${employee.salary?.toLocaleString()}/month`
-                      : `₹${employee.dailyRate}/day`}
+                    {employee.employment_type === 'FIXED'
+                      ? `₹${employee.monthly_salary?.toLocaleString()}/month`
+                      : `₹${employee.daily_rate}/day`}
                   </p>
                 </div>
               </div>

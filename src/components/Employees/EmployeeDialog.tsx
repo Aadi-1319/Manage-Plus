@@ -18,122 +18,119 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useAuth } from '@/hooks/useAuth';
 
-import { supabase } from "@/lib/supabaseClient";
+export type EmployeePayload = {
+  full_name: string;
+  mobile: string;
+  aadhar?: string | null;
+  pan?: string | null;
+  address?: string | null;
+
+  employment_type: 'FIXED' | 'DAILY';
+  monthly_salary?: number | null;
+  daily_rate?: number | null;
+
+  join_date?: string | null;
+  status: 'active' | 'inactive';
+
+  company_id: string;          // uuid
+  supervisor_id?: string | null; // uuid | null
+};
+
+
 
 interface EmployeeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   employee: Employee | null;
-  onSave: () => void;
+  onSave: (data: EmployeePayload) => void; // ✅ accepts data
 }
 
 const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
+  
   open,
   onOpenChange,
   employee,
   onSave,
 }) => {
   const [formData, setFormData] = useState({
-  employee_id: null,
-  name: '',
+  full_name: '',
   mobile: '',
   aadhar: '',
   pan: '',
   address: '',
-  type: 'FIXED',
+  employment_type: 'FIXED' as 'FIXED' | 'DAILY',
   salary: 0,
   dailyRate: 0,
-  supervisorId: '',        // added
   joinDate: '',            // added
-  status: 'active',        // added
-  company_id: '',
+  status: 'active' as 'active' | 'inactive',        // added
 });
+
+const { company, user ,role} = useAuth();
+
 
 
   useEffect(() => {
   if (employee) {
     setFormData({
-      employee_id: employee.employee_id,
-      name: employee.name,
+      full_name: employee.full_name,
       mobile: employee.mobile || "",
       address: employee.address || "",
       aadhar: employee.aadhar || "",
       pan: employee.pan || "",
-      type: employee.type,
-      salary: employee.salary || 0,
-      dailyRate: employee.dailyRate || 0,
-      supervisorId: employee.supervisorId || "",
-      joinDate: employee.joinDate,
+      employment_type: employee.employment_type,
+      salary: employee.monthly_salary || 0,
+      dailyRate: employee.daily_rate || 0,
+      joinDate: employee.join_date,
       status: employee.status,
-      company_id: employee.companyId,
     });
   } else {
     setFormData({
-      employee_id: null,
-      name: '',
+      full_name: '',
       mobile: '',
       aadhar: '',
       pan: '',
       address: '',
-      type: 'FIXED',
+      employment_type: 'FIXED',
       salary: 0,
       dailyRate: 0,
-      supervisorId: '',
       joinDate: '',
       status: 'active',
-      company_id: '',
     });
   }
 }, [employee, open]);
 
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    
+  e.preventDefault();
 
-    const payload = {
-  full_name: formData.name,
-  // full_name: formData.name,
-  aadhar: formData.aadhar,
-  pan: formData.pan,
-  employment_type: formData.type,
-  monthly_salary: formData.type === "FIXED" ? formData.salary : null,
-  daily_rate: formData.type === "DAILY" ? formData.dailyRate : null,
-  supervisor_id: formData.supervisorId,
-  join_date: formData.joinDate,
-  status: formData.status,
-  company_id: formData.company_id,
-  mobile: formData.mobile,
-  address: formData.address,
+  console.log(user,company,role);
+  if (!company?.company_id || !user?.id) {
+    alert("Company or user not loaded yet");
+    return;
+  }
+
+  const payload :EmployeePayload= {
+    full_name: formData.full_name,
+    aadhar: formData.aadhar,
+    pan: formData.pan,
+    employment_type: formData.employment_type,
+    monthly_salary: formData.employment_type === "FIXED" ? formData.salary : null,
+    daily_rate: formData.employment_type === "DAILY" ? formData.dailyRate : null,
+    supervisor_id: role === "SUPERVISOR" ? user.id :  null,
+    join_date: formData.joinDate,
+    status: formData.status,
+    company_id: company.company_id,
+    mobile: formData.mobile,
+    address: formData.address,
+  };
+
+    onSave(payload);
+    onOpenChange(false);
 };
 
-
-    try {
-      if (employee?.employee_id) {
-        // UPDATE
-        const { error } = await supabase
-          .from("employee")
-          .update(payload)
-          .eq("employee_id", employee.employee_id);
-
-        if (error) throw error;
-
-      } else {
-        // INSERT
-        const { error } = await supabase
-          .from("employee")
-          .insert([payload]);
-
-        if (error) throw error;
-      }
-
-      onSave();
-      onOpenChange(false);
-
-    } catch (err: any) {
-      alert("Supabase Error: " + err.message);
-    }
-  };
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -155,8 +152,8 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
             <div className="space-y-2">
               <Label>Full Name *</Label>
               <Input
-                value={formData.name}
-                onChange={(e) => handleChange('name', e.target.value)}
+                value={formData.full_name}
+                onChange={(e) => handleChange('full_name', e.target.value)}
                 required
               />
             </div>
@@ -195,10 +192,36 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
             </div>
 
             <div className="space-y-2">
+  <Label>Join Date *</Label>
+  <Input
+    type="date"
+    value={formData.joinDate}
+    onChange={(e) => handleChange('joinDate', e.target.value)}
+    required
+  />
+</div>
+
+
+<div className="space-y-2">
+  <Label>Status</Label>
+  <Select
+    value={formData.status}
+    onValueChange={(value) => handleChange('status', value)}
+  >
+    <SelectTrigger><SelectValue /></SelectTrigger>
+    <SelectContent>
+      <SelectItem value="active">Active</SelectItem>
+      <SelectItem value="inactive">Inactive</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+
+
+            <div className="space-y-2">
               <Label>Employment Type *</Label>
               <Select
-                value={formData.type}
-                onValueChange={(value: any) => handleChange('type', value)}
+                value={formData.employment_type}
+                onValueChange={(value: any) => handleChange('type', value as 'FIXED' | 'DAILY')}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -208,7 +231,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
               </Select>
             </div>
 
-            {formData.type === 'FIXED' ? (
+            {formData.employment_type === 'FIXED' ? (
               <div className="space-y-2">
                 <Label>Monthly Salary *</Label>
                 <Input
@@ -222,7 +245,7 @@ const EmployeeDialog: React.FC<EmployeeDialogProps> = ({
                 <Label>Daily Rate *</Label>
                 <Input
                   type="number"
-                  value={formData.dailyRate}
+                  value={formData.dailyRate | formData.salary}
                   onChange={(e) => handleChange('dailyRate', parseFloat(e.target.value))}
                 />
               </div>

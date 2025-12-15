@@ -8,12 +8,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Search, FileDown, Upload } from 'lucide-react';
 import EmployeeTable from '@/components/Employees/EmployeeTable';
-import EmployeeDialog from '@/components/Employees/EmployeeDialog';
+import EmployeeDialog, { EmployeePayload } from '@/components/Employees/EmployeeDialog';
 import EmployeeHistoryDialog from '@/components/Employees/EmployeeHistoryDialog';
 import ExcelImportDialog from '@/components/Employees/ExcelImportDialog';
 
+import { supabase } from "@/lib/supabaseClient";
+
 const Employees: React.FC = () => {
-  const { company, user } = useAuth();
+  const { company, user ,role} = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [filteredEmployees, setFilteredEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -32,23 +34,35 @@ const Employees: React.FC = () => {
     const statusFilter = activeTab === 'active' ? 'active' : 'inactive';
     const filtered = employees.filter(emp =>
       emp.status === statusFilter &&
-      (emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (emp.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       emp.mobile.includes(searchTerm))
     );
     setFilteredEmployees(filtered);
   }, [searchTerm, employees, activeTab]);
 
-  const loadEmployees = () => {
-    const allEmployees: Employee[] = JSON.parse(localStorage.getItem('employees') || '[]');
-    let companyEmployees = allEmployees.filter(e => e.companyId === company?.id);
-    
-    if (user?.role === 'SUPERVISOR') {
-      companyEmployees = companyEmployees.filter(e => e.supervisorId === user.id);
+  const loadEmployees = async () => {
+  if (!company?.company_id || !user?.id) return;
+
+  try {
+    let query = supabase
+      .from<Employee>('employee')
+      .select('*')
+      .eq('company_id', company.company_id);
+
+    if (role === 'SUPERVISOR') {
+      query = query.eq('supervisor_id', user.id);
     }
-    
-    setEmployees(companyEmployees);
-    setFilteredEmployees(companyEmployees);
-  };
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    setEmployees(data || []);
+    setFilteredEmployees(data || []);
+  } catch (err: any) {
+    console.error('Error fetching employees:', err.message);
+  }
+};
+
 
   const handleEdit = (employee: Employee) => {
     setEditingEmployee(employee);
@@ -60,37 +74,46 @@ const Employees: React.FC = () => {
     setHistoryDialogOpen(true);
   };
 
-  const handleDelete = (id: string) => {
-    const allEmployees: Employee[] = JSON.parse(localStorage.getItem('employees') || '[]');
-    const updated = allEmployees.filter(e => e.id !== id);
-    localStorage.setItem('employees', JSON.stringify(updated));
-    loadEmployees();
+ const handleDelete = async (employee_id: string) => {
+  try {
+    const { error } = await supabase
+      .from('employee')
+      .delete()
+      .eq('employee_id', employee_id);
+    if (error) throw error;
+    await loadEmployees();
+  } catch (err: any) {
+    alert('Delete failed: ' + err.message);
+  }
+};
+
+const handleSave = async (payload: EmployeePayload) => {
+  if (!company?.company_id || !user?.id) {
+    alert("Company or user not loaded yet");
+    return;
+  }
+
+  const finalPayload: EmployeePayload = {
+    ...payload,
+    company_id: company.company_id,
+    supervisor_id: role === 'SUPERVISOR' ? user.id : null,
   };
 
-  const handleSave = (employee: Partial<Employee>) => {
-    const allEmployees: Employee[] = JSON.parse(localStorage.getItem('employees') || '[]');
-    
-    if (editingEmployee) {
-      const updated = allEmployees.map(e =>
-        e.id === editingEmployee.id ? { ...e, ...employee } : e
-      );
-      localStorage.setItem('employees', JSON.stringify(updated));
-    } else {
-      const newEmployee: Employee = {
-        id: `emp_${Date.now()}`,
-        companyId: company!.id,
-        status: 'active',
-        joinDate: new Date().toISOString().split('T')[0],
-        ...employee as Omit<Employee, 'id' | 'companyId' | 'status' | 'joinDate'>,
-      };
-      allEmployees.push(newEmployee);
-      localStorage.setItem('employees', JSON.stringify(allEmployees));
-    }
-    
-    loadEmployees();
-    setDialogOpen(false);
-    setEditingEmployee(null);
-  };
+  if (editingEmployee?.id) {
+    await supabase
+      .from('employee')
+      .update(finalPayload)
+      .eq('employee_id', editingEmployee.id);
+  } else {
+    await supabase.from('employee').insert(finalPayload);
+  }
+
+  await loadEmployees();
+  setDialogOpen(false);
+  setEditingEmployee(null);
+};
+
+
 
   return (
     <div className="space-y-6">
@@ -99,7 +122,7 @@ const Employees: React.FC = () => {
           <h1 className="text-3xl font-bold">Employees</h1>
           <p className="text-muted-foreground mt-1">Manage your workforce</p>
         </div>
-        {user?.role === 'OWNER' && (
+        {role === 'SUPERVISOR' && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
               <Upload className="w-4 h-4 mr-2" />
@@ -143,7 +166,7 @@ const Employees: React.FC = () => {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onViewHistory={handleViewHistory}
-                canEdit={user?.role === 'OWNER'}
+                canEdit={role === 'SUPERVISOR'}
                 showHistory={false}
               />
             </TabsContent>
@@ -153,7 +176,7 @@ const Employees: React.FC = () => {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onViewHistory={handleViewHistory}
-                canEdit={user?.role === 'OWNER'}
+                canEdit={role === 'OWNER'}
                 showHistory={true}
               />
             </TabsContent>
