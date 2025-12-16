@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -8,10 +8,25 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { FileDown, Calendar } from 'lucide-react';
-import { useAuth } from "@/hooks/useAuth";
+
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabaseClient';
 
 import type { Employee, Attendance } from '@/types';
 
@@ -20,70 +35,105 @@ interface MonthlyReportDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-interface EmployeeReport {
-  employee: Employee;
-  totalDays: number;
-  presentDays: number;
-  absentDays: number;
-  calculatedWage: number;
-  deductions: number;
-  finalPay: number;
-}
-
-const MonthlyReportDialog: React.FC<MonthlyReportDialogProps> = ({ open, onOpenChange }) => {
+const MonthlyReportDialog: React.FC<MonthlyReportDialogProps> = ({
+  open,
+  onOpenChange,
+}) => {
   const { company } = useAuth();
-  const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth().toString());
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear().toString());
+
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth());
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [attendance, setAttendance] = useState<Attendance[]>([]);
+  const [loading, setLoading] = useState(false);
   const [reportGenerated, setReportGenerated] = useState(false);
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
+    'July', 'August', 'September', 'October', 'November', 'December',
   ];
 
-  const years = Array.from({ length: 5 }, (_, i) => currentDate.getFullYear() - i);
+  const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - i);
+
+  /* ---------------- FETCH DATA ---------------- */
+
+  const fetchReportData = async () => {
+    if (!company) return;
+
+    setLoading(true);
+    setReportGenerated(false);
+
+    const startDate = new Date(selectedYear, selectedMonth, 1)
+      .toISOString()
+      .split('T')[0];
+
+    const endDate = new Date(selectedYear, selectedMonth + 1, 0)
+      .toISOString()
+      .split('T')[0];
+
+    const [{ data: empData, error: empError }, { data: attData, error: attError }] =
+      await Promise.all([
+        supabase
+          .from('employee')
+          .select('*')
+          .eq('company_id', company.company_id)
+          .eq('status', 'active'),
+
+        supabase
+          .from('attendance')
+          .select('*')
+          .eq('company_id', company.company_id)
+          .gte('date', startDate)
+          .lte('date', endDate),
+      ]);
+
+    if (empError || attError) {
+      console.error(empError || attError);
+      setLoading(false);
+      return;
+    }
+
+    setEmployees(empData || []);
+    setAttendance(attData || []);
+    setReportGenerated(true);
+    setLoading(false);
+  };
+
+  /* ---------------- REPORT LOGIC ---------------- */
+
+  const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
 
   const reportData = useMemo(() => {
-    if (!company || !reportGenerated) return [];
+    if (!reportGenerated) return [];
 
-    const employeesData = JSON.parse(localStorage.getItem('employees') || '[]') as Employee[];
-    const attendanceData = JSON.parse(localStorage.getItem('attendance') || '[]') as Attendance[];
+    return employees.map(emp => {
+      const empAttendance = attendance.filter(
+        a => a.employee_id === emp.employee_id
+      );
 
-    const companyEmployees = employeesData.filter(emp => emp.companyId === company.id);
-    
-    const month = parseInt(selectedMonth);
-    const year = parseInt(selectedYear);
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-    return companyEmployees.map(employee => {
-      const employeeAttendance = attendanceData.filter(att => {
-        const attDate = new Date(att.date);
-        return att.employeeId === employee.id &&
-               att.companyId === company.id &&
-               attDate.getMonth() === month &&
-               attDate.getFullYear() === year;
-      });
-
-      const presentDays = employeeAttendance.filter(att => att.status === 'P').length;
-      const absentDays = employeeAttendance.filter(att => att.status === 'A').length;
+      const presentDays = empAttendance.filter(a => a.status === 'P').length;
+      const absentDays = empAttendance.filter(a => a.status === 'A').length;
 
       let calculatedWage = 0;
       let deductions = 0;
       let finalPay = 0;
 
-      if (employee.type === 'FIXED' && employee.salary) {
-        const dailyRate = employee.salary / daysInMonth;
+      if (emp.employment_type === 'FIXED' && emp.monthly_salary) {
+        const dailyRate = emp.monthly_salary / daysInMonth;
         deductions = dailyRate * absentDays;
-        calculatedWage = employee.salary;
-        finalPay = employee.salary - deductions;
-      } else if (employee.type === 'DAILY' && employee.dailyRate) {
-        calculatedWage = employee.dailyRate * presentDays;
+        calculatedWage = emp.monthly_salary;
+        finalPay = calculatedWage - deductions;
+      }
+
+      if (emp.employment_type === 'DAILY' && emp.daily_rate) {
+        calculatedWage = emp.daily_rate * presentDays;
         finalPay = calculatedWage;
       }
 
       return {
-        employee,
+        employee: emp,
         totalDays: daysInMonth,
         presentDays,
         absentDays,
@@ -92,50 +142,60 @@ const MonthlyReportDialog: React.FC<MonthlyReportDialogProps> = ({ open, onOpenC
         finalPay,
       };
     });
-  }, [company, selectedMonth, selectedYear, reportGenerated]);
-
-  const handleGenerateReport = () => {
-    setReportGenerated(true);
-  };
-
-  const handleExportCSV = () => {
-    if (reportData.length === 0) return;
-
-    const headers = ['Employee Name', 'Type', 'Total Days', 'Present', 'Absent', 'Base Pay', 'Deductions', 'Final Pay'];
-    const rows = reportData.map(data => [
-      data.employee.name,
-      data.employee.type,
-      data.totalDays,
-      data.presentDays,
-      data.absentDays,
-      data.calculatedWage.toFixed(2),
-      data.deductions.toFixed(2),
-      data.finalPay.toFixed(2),
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `monthly-report-${months[parseInt(selectedMonth)]}-${selectedYear}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
+  }, [employees, attendance, reportGenerated]);
 
   const totals = useMemo(() => {
-    return reportData.reduce((acc, data) => ({
-      calculatedWage: acc.calculatedWage + data.calculatedWage,
-      deductions: acc.deductions + data.deductions,
-      finalPay: acc.finalPay + data.finalPay,
-    }), { calculatedWage: 0, deductions: 0, finalPay: 0 });
+    return reportData.reduce(
+      (acc, r) => ({
+        calculatedWage: acc.calculatedWage + r.calculatedWage,
+        deductions: acc.deductions + r.deductions,
+        finalPay: acc.finalPay + r.finalPay,
+      }),
+      { calculatedWage: 0, deductions: 0, finalPay: 0 }
+    );
   }, [reportData]);
+
+  /* ---------------- EXPORT ---------------- */
+
+  const exportCSV = () => {
+    if (!reportData.length) return;
+
+    const headers = [
+      'Employee Name',
+      'Type',
+      'Total Days',
+      'Present',
+      'Absent',
+      'Base Pay',
+      'Deductions',
+      'Final Pay',
+    ];
+
+    const rows = reportData.map(r => [
+      r.employee.full_name,
+      r.employee.employment_type,
+      r.totalDays,
+      r.presentDays,
+      r.absentDays,
+      r.calculatedWage.toFixed(2),
+      r.deductions.toFixed(2),
+      r.finalPay.toFixed(2),
+    ]);
+
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+
+    a.href = url;
+    a.download = `monthly-report-${months[selectedMonth]}-${selectedYear}.csv`;
+    a.click();
+
+    URL.revokeObjectURL(url);
+  };
+
+  /* ---------------- UI ---------------- */
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -143,38 +203,44 @@ const MonthlyReportDialog: React.FC<MonthlyReportDialogProps> = ({ open, onOpenC
         <DialogHeader>
           <DialogTitle>Monthly Attendance & Wage Report</DialogTitle>
           <DialogDescription>
-            Generate comprehensive monthly reports with attendance summary and wage calculations
+            Attendance summary and salary calculation
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div>
               <Label>Month</Label>
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+              <Select
+                value={selectedMonth.toString()}
+                onValueChange={v => setSelectedMonth(Number(v))}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {months.map((month, index) => (
-                    <SelectItem key={index} value={index.toString()}>
-                      {month}
+                  {months.map((m, i) => (
+                    <SelectItem key={i} value={i.toString()}>
+                      {m}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div>
               <Label>Year</Label>
-              <Select value={selectedYear} onValueChange={setSelectedYear}>
+              <Select
+                value={selectedYear.toString()}
+                onValueChange={v => setSelectedYear(Number(v))}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {years.map(year => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
+                  {years.map(y => (
+                    <SelectItem key={y} value={y.toString()}>
+                      {y}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -182,69 +248,55 @@ const MonthlyReportDialog: React.FC<MonthlyReportDialogProps> = ({ open, onOpenC
             </div>
           </div>
 
-          <Button onClick={handleGenerateReport} className="w-full">
+          <Button onClick={fetchReportData} disabled={loading} className="w-full">
             <Calendar className="w-4 h-4 mr-2" />
-            Generate Report
+            {loading ? 'Generating...' : 'Generate Report'}
           </Button>
 
           {reportGenerated && reportData.length > 0 && (
             <>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Employee Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Total Days</TableHead>
-                      <TableHead className="text-right">Present</TableHead>
-                      <TableHead className="text-right">Absent</TableHead>
-                      <TableHead className="text-right">Base Pay</TableHead>
-                      <TableHead className="text-right">Deductions</TableHead>
-                      <TableHead className="text-right">Final Pay</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead className="text-right">Present</TableHead>
+                    <TableHead className="text-right">Absent</TableHead>
+                    <TableHead className="text-right">Final Pay</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reportData.map(r => (
+                    <TableRow key={r.employee.employee_id}>
+                      <TableCell>{r.employee.full_name}</TableCell>
+                      <TableCell>{r.employee.employment_type}</TableCell>
+                      <TableCell className="text-right">{r.presentDays}</TableCell>
+                      <TableCell className="text-right">{r.absentDays}</TableCell>
+                      <TableCell className="text-right">
+                        ₹{r.finalPay.toFixed(2)}
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {reportData.map((data) => (
-                      <TableRow key={data.employee.id}>
-                        <TableCell className="font-medium">{data.employee.name}</TableCell>
-                        <TableCell>
-                          <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
-                            data.employee.type === 'FIXED' 
-                              ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' 
-                              : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          }`}>
-                            {data.employee.type}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-right">{data.totalDays}</TableCell>
-                        <TableCell className="text-right">{data.presentDays}</TableCell>
-                        <TableCell className="text-right">{data.absentDays}</TableCell>
-                        <TableCell className="text-right">₹{data.calculatedWage.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">₹{data.deductions.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-semibold">₹{data.finalPay.toFixed(2)}</TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="bg-muted/50 font-semibold">
-                      <TableCell colSpan={5}>TOTAL</TableCell>
-                      <TableCell className="text-right">₹{totals.calculatedWage.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">₹{totals.deductions.toFixed(2)}</TableCell>
-                      <TableCell className="text-right">₹{totals.finalPay.toFixed(2)}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </div>
+                  ))}
+                  <TableRow className="font-semibold">
+                    <TableCell colSpan={4}>TOTAL</TableCell>
+                    <TableCell className="text-right">
+                      ₹{totals.finalPay.toFixed(2)}
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
 
-              <Button onClick={handleExportCSV} variant="outline" className="w-full">
+              <Button variant="outline" onClick={exportCSV} className="w-full">
                 <FileDown className="w-4 h-4 mr-2" />
-                Export to CSV
+                Export CSV
               </Button>
             </>
           )}
 
           {reportGenerated && reportData.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              No employee data found for the selected period
-            </div>
+            <p className="text-center text-muted-foreground">
+              No data found for selected month
+            </p>
           )}
         </div>
       </DialogContent>

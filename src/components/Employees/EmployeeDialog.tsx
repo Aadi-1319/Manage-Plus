@@ -105,8 +105,6 @@ const { company, user ,role} = useAuth();
   const handleSubmit = async (e: React.FormEvent) => {
     
   e.preventDefault();
-
-  console.log(user,company,role);
   if (!company?.company_id || !user?.id) {
     alert("Company or user not loaded yet");
     return;

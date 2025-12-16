@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Supervisor, User } from '@/types';
+import React, { useEffect, useState } from 'react';
+import { Supervisor} from '@/types';
 import {
   Dialog,
   DialogContent,
@@ -17,11 +17,13 @@ import { useToast } from '@/hooks/use-toast';
 interface SupervisorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  supervisor: Supervisor | null;
   onSave: (supervisor: Partial<Supervisor>) => void;
 }
 
 const SupervisorDialog: React.FC<SupervisorDialogProps> = ({
   open,
+  supervisor,
   onOpenChange,
   onSave,
 }) => {
@@ -33,6 +35,28 @@ const SupervisorDialog: React.FC<SupervisorDialogProps> = ({
   pan: '',
   address: '',
 });
+
+
+  useEffect(() => {
+  if (supervisor) {
+    setFormData({
+      fullName: supervisor.fullName,
+      address: supervisor.address || "",
+      aadhar: supervisor.aadhar || "",
+      pan: supervisor.pan || "",
+      email: supervisor.email,
+      phone: supervisor.phone || "",
+    });
+  } else {
+    setFormData({
+      fullName: '',
+      phone: '',
+      aadhar: '',
+      pan: '',
+      address: '',
+      email: '',});
+  }
+}, [supervisor, open]);
 
   const { toast } = useToast();
 
@@ -141,7 +165,9 @@ const SupervisorDialog: React.FC<SupervisorDialogProps> = ({
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">Add Supervisor</Button>
+            <Button type="submit">
+              {supervisor ? 'Update' : 'Add'} Supervisor
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

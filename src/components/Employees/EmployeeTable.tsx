@@ -63,7 +63,7 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({
       </TableHeader>
       <TableBody>
         {employees.map((employee) => (
-          <TableRow key={employee.id}>
+          <TableRow key={employee.employee_id}>
             <TableCell className="font-medium">{employee.full_name}</TableCell>
             <TableCell>{employee.mobile}</TableCell>
             <TableCell>
@@ -118,7 +118,7 @@ const EmployeeTable: React.FC<EmployeeTableProps> = ({
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => onDelete(employee.id)}>
+                            <AlertDialogAction onClick={() => onDelete(employee.employee_id)} className="bg-red-600 hover:bg-red-700 focus:ring-red-600">
                               Delete
                             </AlertDialogAction>
                           </AlertDialogFooter>

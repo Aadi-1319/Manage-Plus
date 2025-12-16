@@ -6,63 +6,79 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from "@/hooks/useAuth";
-
 import type { Employee, Attendance } from '@/types';
+import { supabase } from '@/lib/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 export default function AttendanceHistory() {
-  const { user } = useAuth();
+  const { user, company,role } = useAuth();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('all');
   const [attendanceRecords, setAttendanceRecords] = useState<Attendance[]>([]);
 
   useEffect(() => {
-    loadEmployees();
-  }, []);
+    if (company) fetchEmployees();
+  }, [company]);
 
   useEffect(() => {
-    loadAttendance();
-  }, [currentMonth, selectedEmployeeId]);
+    if (company) fetchAttendance();
+  }, [currentMonth, selectedEmployeeId, company]);
 
-  const loadEmployees = () => {
-    const company = JSON.parse(localStorage.getItem('currentCompany') || '{}');
-    const allEmployees: Employee[] = JSON.parse(localStorage.getItem('employees') || '[]');
-    
-    let filtered = allEmployees.filter(emp => 
-      emp.companyId === company.id && emp.status === 'active'
-    );
+  /** Fetch employees from Supabase */
+  const fetchEmployees = async () => {
+    let query = supabase
+      .from<Employee>('employee')
+      .select('*')
+      .eq('company_id', company!.company_id)
+      .eq('status', 'active');
 
-    if (user?.role === 'SUPERVISOR') {
-      filtered = filtered.filter(emp => emp.supervisorId === user.id);
+    // If user is supervisor, filter by supervisorId
+    if (role === 'SUPERVISOR') {
+      query = query.eq('supervisor_id', user.id);
     }
 
-    setEmployees(filtered);
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching employees:', error);
+      return;
+    }
+
+    setEmployees(data || []);
   };
 
-  const loadAttendance = () => {
-    const company = JSON.parse(localStorage.getItem('currentCompany') || '{}');
-    const allAttendance: Attendance[] = JSON.parse(localStorage.getItem('attendance') || '[]');
-    
+  /** Fetch attendance from Supabase */
+  const fetchAttendance = async () => {
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
 
-    const filtered = allAttendance.filter(record => {
-      const recordDate = new Date(record.date);
-      const inMonth = recordDate >= monthStart && recordDate <= monthEnd;
-      const inCompany = record.companyId === company.id;
-      const matchesEmployee = selectedEmployeeId === 'all' || record.employeeId === selectedEmployeeId;
-      
-      return inMonth && inCompany && matchesEmployee;
-    });
+    let query = supabase
+      .from<Attendance>('attendance')
+      .select('*')
+      .eq('company_id', company!.company_id)
+      .gte('date', format(monthStart, 'yyyy-MM-dd'))
+      .lte('date', format(monthEnd, 'yyyy-MM-dd'));
 
-    setAttendanceRecords(filtered);
+    // Filter by employee if selected
+    if (selectedEmployeeId !== 'all') {
+      query = query.eq('employee_id', selectedEmployeeId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching attendance:', error);
+      return;
+    }
+
+    setAttendanceRecords(data || []);
   };
 
   const getAttendanceStatus = (employeeId: string, date: Date) => {
-    const record = attendanceRecords.find(r => 
-      r.employeeId === employeeId && 
+    const record = attendanceRecords.find(r =>
+      r.employee_id === employeeId &&
       isSameDay(new Date(r.date), date)
     );
     return record?.status;
@@ -79,7 +95,7 @@ export default function AttendanceHistory() {
   const nextMonth = () => setCurrentMonth(addMonths(currentMonth, 1));
 
   const getAttendanceSummary = (employeeId: string) => {
-    const employeeRecords = attendanceRecords.filter(r => r.employeeId === employeeId);
+    const employeeRecords = attendanceRecords.filter(r => r.employee_id === employeeId);
     const present = employeeRecords.filter(r => r.status === 'P').length;
     const absent = employeeRecords.filter(r => r.status === 'A').length;
     return { present, absent, total: present + absent };
@@ -87,21 +103,19 @@ export default function AttendanceHistory() {
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    const company = JSON.parse(localStorage.getItem('currentCompany') || '{}');
-    
     doc.setFontSize(16);
     doc.text(`Attendance History - ${format(currentMonth, 'MMMM yyyy')}`, 14, 15);
     doc.setFontSize(10);
-    doc.text(company.name || 'Company', 14, 22);
+    doc.text(company?.name || 'Company', 14, 22);
 
-    const displayEmployees = selectedEmployeeId === 'all' 
-      ? employees 
-      : employees.filter(e => e.id === selectedEmployeeId);
+    const displayEmployees = selectedEmployeeId === 'all'
+      ? employees
+      : employees.filter(e => e.employee_id === selectedEmployeeId);
 
     const tableData = displayEmployees.map(emp => {
-      const summary = getAttendanceSummary(emp.id);
+      const summary = getAttendanceSummary(emp.employee_id);
       return [
-        emp.name,
+        emp.full_name,
         emp.mobile,
         summary.present.toString(),
         summary.absent.toString(),
@@ -119,9 +133,9 @@ export default function AttendanceHistory() {
     doc.save(`attendance-history-${format(currentMonth, 'yyyy-MM')}.pdf`);
   };
 
-  const displayEmployees = selectedEmployeeId === 'all' 
-    ? employees 
-    : employees.filter(e => e.id === selectedEmployeeId);
+  const displayEmployees = selectedEmployeeId === 'all'
+    ? employees
+    : employees.filter(e => e.employee_id === selectedEmployeeId);
 
   const daysInMonth = getDaysInMonth();
   const today = new Date();
@@ -148,11 +162,13 @@ export default function AttendanceHistory() {
                 <SelectContent>
                   <SelectItem value="all">All Employees</SelectItem>
                   {employees.map(emp => (
-                    <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                    <SelectItem key={emp.employee_id} value={emp.employee_id}>
+                      {emp.full_name}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              
+
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="icon" onClick={previousMonth}>
                   <ChevronLeft className="h-4 w-4" />
@@ -191,12 +207,12 @@ export default function AttendanceHistory() {
             ) : (
               <div className="space-y-6">
                 {displayEmployees.map(employee => {
-                  const summary = getAttendanceSummary(employee.id);
+                  const summary = getAttendanceSummary(employee.employee_id);
                   return (
-                    <div key={employee.id} className="space-y-3">
+                    <div key={employee.employee_id} className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div>
-                          <h3 className="font-semibold text-foreground">{employee.name}</h3>
+                          <h3 className="font-semibold text-foreground">{employee.full_name}</h3>
                           <p className="text-sm text-muted-foreground">{employee.mobile}</p>
                         </div>
                         <div className="flex items-center gap-4 text-sm">
@@ -213,13 +229,13 @@ export default function AttendanceHistory() {
                           )}
                         </div>
                       </div>
-                      
+
                       <div className="grid grid-cols-7 gap-2">
                         {daysInMonth.map(day => {
-                          const status = getAttendanceStatus(employee.id, day);
+                          const status = getAttendanceStatus(employee.employee_id, day);
                           const isToday = isSameDay(day, today);
                           const isFutureDate = day > today;
-                          
+
                           return (
                             <div
                               key={day.toISOString()}
