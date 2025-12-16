@@ -18,6 +18,7 @@ import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
 import Admin from "@/pages/Admin";
 import NotFound from "./pages/NotFound";
+import SetupAccount from "./pages/SetupAccount";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/setup-account" element={<SetupAccount />} />
           <Route path="/verify" element={<VeriLoader />} />
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />

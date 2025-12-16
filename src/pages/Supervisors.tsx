@@ -60,7 +60,7 @@ const Supervisors: React.FC = () => {
 
   const { error } = await supabase
     .from('supervisor')
-    .delete()
+    .update({ status: 'DISABLED' })
     .eq('supervisor_id', supervisor_id);
 
   if (error) {
@@ -82,6 +82,41 @@ const handleSave = async (supervisor: Partial<Supervisor>) => {
     throw new Error('Company or user not found');
   }
 
+ const handleSave = async (supervisor: Partial<Supervisor>) => {
+  if (!company?.company_id) {
+    throw new Error("Company not found");
+  }
+  console.log(supervisor)
+  const session = (await supabase.auth.getSession()).data.session;
+  if (!session) {
+    throw new Error("Not authenticated");
+  }
+
+  const res = await fetch(
+  "https://cbfkbkywqndothzrydyv.supabase.co/functions/v1/invite-supervisor",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${session.access_token}`,
+    },
+    body: JSON.stringify({
+      email: supervisor.email,
+      full_name: supervisor.fullName,
+      phone: supervisor.phone ?? null,
+      aadhar: supervisor.aadhar ?? null,
+      pan: supervisor.pan ?? null,
+      address: supervisor.address ?? null,
+      company_id: company.company_id,
+      owner_id: user.id
+    }),
+  }
+);
+
+  if (!res.ok) {
+    const err = await res.json();
+    console.error("Invite error:", err);
+    throw new Error(err.error || "Failed to invite supervisor");
   // fields that can always be edited
   const basePayload = {
     full_name: supervisor.fullName,

@@ -90,9 +90,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       .eq("owner_id", user.id)
       .maybeSingle();
 
+      const { data: supervisor, error: supErr } = await supabase
+    .from("supervisor")
+    .select("company_id, status")
+    .eq("supervisor_id", user.id)
+    .single();
+
+  if (supervisor ) {
+    console.log("✅ Active supervisor found");
+    return {
+      role: "SUPERVISOR",
+      company_id: supervisor.company_id,
+    };
+  }
+
+
       console.log("📦 Owner result:", owner);
 
     if (owner) return owner.company_id;
+
 
     const meta = user.user_metadata;
 
@@ -162,6 +178,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       password,
     });
 
+    console.log("success")
+
     if (error) {
       setLoading(false);
       throw error;
@@ -175,9 +193,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     setUser(user);
-
+    console.log("1:")
     const companyId = await ensureOwnerAndCompany(user);
+    console.log("2:")
     const roleCompanyId = await fetchRole(user.id);
+    console.log("3:")
 
     if (roleCompanyId) {
       await fetchCompany(roleCompanyId);
