@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from '@/lib/supabaseClient';
 
-import { User } from '@/types';
+import { Supervisor} from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Plus } from 'lucide-react';
@@ -11,7 +11,8 @@ import SupervisorDialog from '@/components/Supervisors/SupervisorDialog';
 
 const Supervisors: React.FC = () => {
   const { company, user,role } = useAuth();
-  const [supervisors, setSupervisors] = useState<User[]>([]);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
+  const [editingSupervisor, setEditingSupervisor] = useState<Supervisor | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
  useEffect(() => {
@@ -23,7 +24,6 @@ const Supervisors: React.FC = () => {
 
  const loadSupervisors = async () => {
   if (!company?.company_id) return;
-  console.log("compnay :",company)
   const { data, error } = await supabase
     .from('supervisor')
     .select('*')
@@ -71,35 +71,57 @@ const Supervisors: React.FC = () => {
   await loadSupervisors(); // ✅ INSIDE async function
 };
 
+const handleEdit = (supervisor: Supervisor) => {
+    console.log('Editing supervisor:', supervisor.supervisor_id);
+    setEditingSupervisor(supervisor);
+    setDialogOpen(true);
+  };
 
+const handleSave = async (supervisor: Partial<Supervisor>) => {
+  if (!company?.company_id || !user?.id) {
+    throw new Error('Company or user not found');
+  }
 
-  const handleSave = async (supervisor: Partial<User>) => {
-    console.log(company.company_id)
-  if (!company?.company_id) throw new Error('Company not found');
+  // fields that can always be edited
+  const basePayload = {
+    full_name: supervisor.fullName,
+    email: supervisor.email,
+    phone: supervisor.phone,
+    aadhar: supervisor.aadhar,
+    pan: supervisor.pan,
+    address: supervisor.address,
+  };
 
-  const { error } = await supabase
-    .from('supervisor')
-    .insert({
-      full_name: supervisor.fullName,
-      email: supervisor.email,
-      company_id: company.company_id,
-      phone: supervisor.phone,
-      aadhar: supervisor.aadhar,
-      pan: supervisor.pan,
-      address: supervisor.address,
-    });
+  // ---------- UPDATE ----------
+  if (editingSupervisor.supervisor_id) {
+    const { error } = await supabase
+      .from('supervisor')
+      .update(basePayload)
+      .eq('supervisor_id', editingSupervisor.supervisor_id);
+    if (error) throw error;
+  }
 
-  if (error) {
-    if (error.code === '23505') {
-      throw new Error('Email already exists');
+  // ---------- INSERT ----------
+  else {
+    const { error } = await supabase
+      .from('supervisor')
+      .insert({
+        ...basePayload,
+        company_id: company.company_id, // only on insert
+        owner_id: user.id,              // only on insert
+      });
+
+    if (error) {
+      if (error.code === '23505') {
+        throw new Error('Email already exists');
+      }
+      throw error;
     }
-    throw error;
   }
 
   await loadSupervisors();
   setDialogOpen(false);
 };
-
 
   if (role !== 'OWNER') {
     return (
@@ -127,13 +149,14 @@ const Supervisors: React.FC = () => {
           <CardTitle>All Supervisors</CardTitle>
         </CardHeader>
         <CardContent>
-          <SupervisorTable supervisors={supervisors} onDelete={handleDelete} />
+          <SupervisorTable supervisors={supervisors} onDelete={handleDelete} onEdit={handleEdit}/>
         </CardContent>
       </Card>
 
       <SupervisorDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
+        supervisor={editingSupervisor}
         onSave={handleSave}
       />
     </div>

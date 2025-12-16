@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from "@/hooks/useAuth";
-
 import { Employee, Attendance as AttendanceType, AttendanceStatus } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,80 +10,108 @@ import { CalendarIcon, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabaseClient'; // Make sure you have a supabaseClient setup
 
 const Attendance: React.FC = () => {
-  const { user, company } = useAuth();
+  const { user, company,role } = useAuth();
   const [date, setDate] = useState<Date>(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
   const { toast } = useToast();
+  const dateStr = format(date, 'yyyy-MM-dd');
 
   useEffect(() => {
-    loadEmployees();
-    loadAttendance();
+    if (company) {
+      fetchEmployees();
+      fetchAttendance();
+    }
   }, [company, date]);
 
-  const loadEmployees = () => {
-    const allEmployees: Employee[] = JSON.parse(localStorage.getItem('employees') || '[]');
-    let companyEmployees = allEmployees.filter(
-      e => e.companyId === company?.id && e.status === 'active'
-    );
+  /** Fetch employees from Supabase */
+  const fetchEmployees = async () => {
+    const { data, error } = await supabase
+      .from<Employee>('employee')
+      .select('*')
+      .eq('company_id', company!.company_id)
+      .eq('status', 'active');
 
-    if (user?.role === 'SUPERVISOR') {
+    if (error) return console.error('Error fetching employees:', error);
+
+    let companyEmployees = data || [];
+
+    if (role === 'SUPERVISOR') {
       companyEmployees = companyEmployees.filter(e => e.supervisorId === user.id);
     }
 
     setEmployees(companyEmployees);
   };
 
-  const loadAttendance = () => {
-    const allAttendance: AttendanceType[] = JSON.parse(localStorage.getItem('attendances') || '[]');
-    const dateStr = format(date, 'yyyy-MM-dd');
-    const dayAttendance = allAttendance.filter(
-      a => a.date === dateStr && a.companyId === company?.id
-    );
+  /** Fetch attendance from Supabase for selected date */
+  const fetchAttendance = async () => {
+    const { data, error } = await supabase
+      .from<AttendanceType>('attendance')
+      .select('*')
+      .eq('company_id', company!.company_id)
+      .eq('date', dateStr);
+
+    if (error) return console.error('Error fetching attendance:', error);
 
     const attendanceMap: Record<string, AttendanceStatus> = {};
-    dayAttendance.forEach(a => {
-      attendanceMap[a.employeeId] = a.status;
+    data?.forEach(a => {
+      attendanceMap[a.employee_id] = a.status;
     });
     setAttendance(attendanceMap);
   };
 
-  const toggleAttendance = (employeeId: string) => {
+  /** Toggle attendance for an employee */
+  const toggleAttendance = (employee_id: string) => {
     setAttendance(prev => ({
       ...prev,
-      [employeeId]: prev[employeeId] === 'P' ? 'A' : 'P',
+      [employee_id]: prev[employee_id] === 'P' ? 'A' : 'P',
     }));
   };
 
-  const saveAttendance = () => {
-    const allAttendance: AttendanceType[] = JSON.parse(localStorage.getItem('attendances') || '[]');
-    const dateStr = format(date, 'yyyy-MM-dd');
+  /** Save attendance to Supabase */
+  const saveAttendance = async () => {
+    // Delete existing attendance for this date and company
+    const { error: deleteError } = await supabase
+      .from('attendance')
+      .delete()
+      .eq('company_id', company!.company_id)
+      .eq('date', dateStr);
 
-    // Remove existing attendance for this date and company
-    const filtered = allAttendance.filter(
-      a => !(a.date === dateStr && a.companyId === company?.id)
-    );
+    if (deleteError) {
+      console.error('Error deleting old attendance:', deleteError);
+      return;
+    }
 
-    // Add new attendance records
-    Object.entries(attendance).forEach(([employeeId, status]) => {
-      filtered.push({
-        id: `att_${Date.now()}_${employeeId}`,
-        employeeId,
-        date: dateStr,
-        status,
-        markedBy: user!.id,
-        companyId: company!.id,
+    // Insert new attendance
+    const newRecords = Object.entries(attendance).map(([employee_id, status]) => ({
+      employee_id,
+      company_id: company!.company_id,
+      date: dateStr,
+      status,
+      marked_by_owner: role === 'OWNER' ? user.id : null,
+      marked_by_supervisor: role === 'SUPERVISOR' ? user.id : null,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('attendance')
+      .insert(newRecords);
+
+    if (insertError) {
+      console.error('Error saving attendance:', insertError);
+      toast({
+        title: 'Error',
+        description: 'Failed to save attendance.',
+        variant: 'destructive',
       });
-    });
-
-    localStorage.setItem('attendances', JSON.stringify(filtered));
-    
-    toast({
-      title: 'Attendance saved',
-      description: `Attendance for ${format(date, 'PPP')} has been saved successfully.`,
-    });
+    } else {
+      toast({
+        title: 'Attendance saved',
+        description: `Attendance for ${format(date, 'PPP')} has been saved successfully.`,
+      });
+    }
   };
 
   return (
@@ -128,26 +155,26 @@ const Attendance: React.FC = () => {
             ) : (
               employees.map(employee => (
                 <div
-                  key={employee.id}
+                  key={employee.employee_id}
                   className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                 >
                   <div className="flex-1">
-                    <p className="font-medium">{employee.name}</p>
+                    <p className="font-medium">{employee.full_name}</p>
                     <p className="text-sm text-muted-foreground">{employee.mobile}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <Button
-                      variant={attendance[employee.id] === 'P' ? 'default' : 'outline'}
+                      variant={attendance[employee.employee_id] === 'P' ? 'default' : 'outline'}
                       className={cn(
-                        attendance[employee.id] === 'P' && 'bg-secondary hover:bg-secondary/90'
+                        attendance[employee.employee_id] === 'P' && 'bg-secondary hover:bg-secondary/90'
                       )}
-                      onClick={() => toggleAttendance(employee.id)}
+                      onClick={() => toggleAttendance(employee.employee_id)}
                     >
                       Present
                     </Button>
                     <Button
-                      variant={attendance[employee.id] === 'A' ? 'destructive' : 'outline'}
-                      onClick={() => toggleAttendance(employee.id)}
+                      variant={attendance[employee.employee_id] === 'A' ? 'destructive' : 'outline'}
+                      onClick={() => toggleAttendance(employee.employee_id)}
                     >
                       Absent
                     </Button>
