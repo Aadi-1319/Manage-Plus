@@ -45,14 +45,14 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
     // Load attendance records
     const allAttendance: Attendance[] = JSON.parse(localStorage.getItem('attendance') || '[]');
     const employeeAttendance = allAttendance
-      .filter(a => a.employeeId === employee.id)
+      .filter(a => a.employeeId === employee.employee_id)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setAttendanceRecords(employeeAttendance);
 
     // Load pay history
     const allPayHistory: PayHistory[] = JSON.parse(localStorage.getItem('payHistory') || '[]');
     const employeePayHistory = allPayHistory
-      .filter(p => p.employeeId === employee.id)
+      .filter(p => p.employeeId === employee.employee_id)
       .sort((a, b) => b.month.localeCompare(a.month));
     setPayHistory(employeePayHistory);
   };
@@ -67,7 +67,7 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-2xl">Employee History - {employee.name}</DialogTitle>
+          <DialogTitle className="text-2xl">Employee History - {employee.full_name}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">

@@ -4,18 +4,18 @@ export type EmployeeType = 'FIXED' | 'DAILY';
 
 export type AttendanceStatus = 'P' | 'A';
 
-export interface User {
-  supervisor_id: string;
-  email: string;
-  fullName: string;
-  role: UserRole;
-  companyId: string;
-  aadhar?: string;
-  phone?: string;
-  pan?: string;
-  address?: string;
-  createdAt: string;
-}
+// export interface User {
+//   supervisor_id: string;
+//   email: string;
+//   fullName: string;
+//   role: UserRole;
+//   companyId: string;
+//   aadhar?: string;
+//   phone?: string;
+//   pan?: string;
+//   address?: string;
+//   createdAt: string;
+// }
 
 export interface Company {
   id: string;
@@ -27,17 +27,25 @@ export interface Company {
   subscriptionStatus: 'active' | 'expired';
   createdAt: string;
 }
-
 export interface Supervisor {
-  id: string;
-  fullName: string;
+  supervisor_id: string;
   email: string;
+  fullName: string;
+  role: UserRole;      // keep role for permission checks
   companyId: string;
+
+  // optional identity details
+  aadhar?: string;
+  phone?: string;
+  pan?: string;
+  address?: string;
+
   createdAt: string;
 }
 
+
 export interface Employee {
-  id: string;
+  employee_id: string;
   full_name: string;
   mobile: string;
   aadhar?: string;
@@ -54,19 +62,20 @@ export interface Employee {
 
 export interface Attendance {
   id: string;
-  employeeId: string;
+  employee_id: string;
   date: string;
   status: AttendanceStatus;
-  markedBy: string;
-  companyId: string;
+  marked_by_supervisor: string;
+  marked_by_owner: string;
+  company_id: string;
 }
 
 export interface PayHistory {
   id: string;
-  employeeId: string;
+  employee_id: string;
   month: string;
   basePay: number;
   deductions: number;
   finalPay: number;
-  companyId: string;
+  company_id: string;
 }

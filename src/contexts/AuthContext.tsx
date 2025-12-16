@@ -6,6 +6,8 @@ import React, {
   ReactNode,
 } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useNavigate } from "react-router-dom";
+
 
 interface SignupData {
   fullName: string;
@@ -33,6 +35,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [company, setCompany] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
+  const navigate = useNavigate();
   /* ----------------------------- HELPERS ----------------------------- */
 
   const fetchRole = async (uid: string) => {
@@ -265,9 +268,21 @@ const signup = async (
 
       if (ownerError) throw ownerError;
       console.log("👑 Owner created:", newOwner);
-    }
 
+      const { error: companyUpdateError } = await supabase
+    .from('company')
+    .update({ owner_id: userId })
+    .eq('company_id', companyId);
+
+  if (companyUpdateError) throw companyUpdateError;
+
+  console.log("🏢 Company updated with owner_id:", userId);
+
+}
     console.log("🎉 Signup complete for:", email);
+
+    alert("Please verify your email before logging in.");
+    navigate("/verify");
   } catch (error) {
     console.error("Signup error:", error);
     throw error;

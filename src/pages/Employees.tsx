@@ -93,19 +93,51 @@ const handleSave = async (payload: EmployeePayload) => {
     return;
   }
 
-  const finalPayload: EmployeePayload = {
-    ...payload,
-    company_id: company.company_id,
-    supervisor_id: role === 'SUPERVISOR' ? user.id : null,
+  // fields that are ALWAYS editable
+  const basePayload = {
+    full_name: payload.full_name,
+    mobile: payload.mobile,
+    aadhar: payload.aadhar,
+    pan: payload.pan,
+    address: payload.address,
+    employment_type: payload.employment_type,
+    monthly_salary: payload.monthly_salary,
+    daily_rate: payload.daily_rate,
+    join_date: payload.join_date,
+    status: payload.status,
   };
 
-  if (editingEmployee?.id) {
-    await supabase
+  // ---------------- UPDATE ----------------
+  if (editingEmployee?.employee_id) {
+    // 🔒 DO NOT touch owner_id / supervisor_id
+    const { error } = await supabase
       .from('employee')
-      .update(finalPayload)
-      .eq('employee_id', editingEmployee.id);
-  } else {
-    await supabase.from('employee').insert(finalPayload);
+      .update(basePayload)
+      .eq('employee_id', editingEmployee.employee_id);
+
+    if (error) throw error;
+  }
+
+  // ---------------- INSERT ----------------
+  else {
+    const insertPayload: any = {
+      ...basePayload,
+      company_id: company.company_id,
+    };
+
+    if (role === 'OWNER') {
+      insertPayload.owner_id = user.id;
+    }
+
+    if (role === 'SUPERVISOR') {
+      insertPayload.supervisor_id = user.id;
+    }
+
+    const { error } = await supabase
+      .from('employee')
+      .insert(insertPayload);
+
+    if (error) throw error;
   }
 
   await loadEmployees();
@@ -122,7 +154,7 @@ const handleSave = async (payload: EmployeePayload) => {
           <h1 className="text-3xl font-bold">Employees</h1>
           <p className="text-muted-foreground mt-1">Manage your workforce</p>
         </div>
-        {role === 'SUPERVISOR' && (
+        {(role === 'SUPERVISOR' || role === 'OWNER') && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
               <Upload className="w-4 h-4 mr-2" />
@@ -166,7 +198,7 @@ const handleSave = async (payload: EmployeePayload) => {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onViewHistory={handleViewHistory}
-                canEdit={role === 'SUPERVISOR'}
+                canEdit={role === 'SUPERVISOR' || role === 'OWNER'}
                 showHistory={false}
               />
             </TabsContent>
@@ -176,7 +208,7 @@ const handleSave = async (payload: EmployeePayload) => {
                 onEdit={handleEdit}
                 onDelete={handleDelete}
                 onViewHistory={handleViewHistory}
-                canEdit={role === 'OWNER'}
+                canEdit={role === 'OWNER' || role === 'SUPERVISOR'}
                 showHistory={true}
               />
             </TabsContent>
