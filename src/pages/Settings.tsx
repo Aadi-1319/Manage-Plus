@@ -19,21 +19,67 @@ const Settings: React.FC = () => {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Profile Information</CardTitle>
-          <CardDescription>Update your personal information</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input id="name" defaultValue={user?.user_metadata?.fullName ?? ""} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" defaultValue={user?.email ?? ""} disabled />
-          </div>
-          <Button>Save Changes</Button>
-        </CardContent>
+       <CardHeader>
+  <CardTitle>Profile Information</CardTitle>
+  <CardDescription>Update your personal and company information</CardDescription>
+</CardHeader>
+
+<CardContent className="space-y-4">
+  {/* User info */}
+  <div className="space-y-2">
+    <Label htmlFor="name">Full Name</Label>
+    <Input
+      id="name"
+      defaultValue={user?.user_metadata?.fullName ?? ""}
+    />
+  </div>
+
+  <div className="space-y-2">
+    <Label htmlFor="email">Email</Label>
+    <Input
+      id="email"
+      type="email"
+      defaultValue={user?.email ?? ""}
+      disabled
+    />
+  </div>
+
+  {/* Company info */}
+  <div className="space-y-2">
+    <Label htmlFor="companyName">Company Name</Label>
+    <Input
+      id="companyName"
+      defaultValue={user?.user_metadata?.companyName ?? ""}
+    />
+  </div>
+
+  <div className="space-y-2">
+    <Label htmlFor="gst">GST Number</Label>
+    <Input
+      id="gst"
+      placeholder="22AAAAA0000A1Z5"
+      defaultValue={user?.user_metadata?.gstNo?? ""}
+    />
+  </div>
+
+  <div className="space-y-2">
+    <Label htmlFor="address">Company Address</Label>
+    <Input
+      id="address"
+      defaultValue={user?.user_metadata?.address ?? ""}
+    />
+  </div>
+  <div className="space-y-2">
+    <Label htmlFor="phone">Phone Number</Label>
+    <Input
+      id="phone"
+      defaultValue={user?.user_metadata?.phone ?? ""}
+      disabled
+    />
+  </div>
+
+  <Button>Save Changes</Button>
+</CardContent>
       </Card>
 
       <Card>
