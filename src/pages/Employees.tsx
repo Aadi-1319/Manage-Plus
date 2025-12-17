@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from "@/hooks/useAuth";
-
+import * as XLSX from 'xlsx';
 import { Employee } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import EmployeeHistoryDialog from '@/components/Employees/EmployeeHistoryDialog'
 import ExcelImportDialog from '@/components/Employees/ExcelImportDialog';
 
 import { supabase } from "@/lib/supabaseClient";
+import { toast } from '@/hooks/use-toast';
 
 const Employees: React.FC = () => {
   const { company, user ,role} = useAuth();
@@ -145,6 +146,93 @@ const handleSave = async (payload: EmployeePayload) => {
   setEditingEmployee(null);
 };
 
+const exportEmployees = async () => {
+
+  let query = supabase
+  .from('employee')
+  .select(`
+    full_name,
+    mobile,
+    aadhar,
+    pan,
+    address,
+    city,
+    state,
+    zipcode,
+    employment_type,
+    monthly_salary,
+    daily_rate,
+    join_date,
+    status
+  `)
+  .eq('company_id', company.company_id)
+  .order('full_name');
+
+// 🔐 Role-based filtering
+if (role === 'SUPERVISOR') {
+  query = query.eq('supervisor_id', user.id);
+} 
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error(error);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    toast({
+      title: 'No data',
+      description: 'No employees found to export',
+      variant: 'destructive',
+    });
+    return;
+  }
+
+  exportToExcel(data);
+};
+
+const exportToExcel = (employees: any[]) => {
+  const formattedData = employees.map(emp => ({
+    full_name: emp.full_name,
+    mobile: emp.mobile,
+    aadhar: emp.aadhar || '',
+    pan: emp.pan || '',
+    address: emp.address || '',
+    city: emp.city || '',
+    state: emp.state || '',
+    zipcode: emp.zipcode || '',
+    employment_type: emp.employment_type,
+    monthly_salary: emp.monthly_salary || '',
+    daily_rate: emp.daily_rate || '',
+    join_date: emp.join_date,
+    status: emp.status,
+  }));
+
+  const worksheet = XLSX.utils.json_to_sheet(formattedData);
+  const workbook = XLSX.utils.book_new();
+
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Employees');
+
+ try {
+  XLSX.writeFile(
+      workbook,
+      `employees_${role.toLowerCase()}_${new Date().toISOString().split('T')[0]}.xlsx`
+    );
+
+     toast({
+      title: 'Export Successful 🎉',
+      description: `${formattedData.length} employees exported to Excel`,
+    });
+ } catch (error) {
+   toast({
+      title: 'Export failed',
+      description: error.message || 'Something went wrong',
+      variant: 'destructive',
+    });
+ }
+};
+
 
 
   return (
@@ -160,7 +248,7 @@ const handleSave = async (payload: EmployeePayload) => {
               <Upload className="w-4 h-4 mr-2" />
               Import
             </Button>
-            <Button variant="outline">
+            <Button variant="outline" onClick={exportEmployees}>
               <FileDown className="w-4 h-4 mr-2" />
               Export
             </Button>

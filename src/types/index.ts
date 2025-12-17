@@ -45,19 +45,23 @@ export interface Supervisor {
 
 
 export interface Employee {
-  employee_id: string;
+  employee_id?: string;
   full_name: string;
   mobile: string;
   aadhar?: string;
   pan?: string;
   address?: string;
+  city?: string;
+  state?: string;
+  zipcode?: string;
   employment_type: EmployeeType;
   monthly_salary?: number;
   daily_rate?: number;
-  supervisorId?: string;
+  supervisor_id?: string;
+  owner_id?: string;
   join_date: string;
   status: 'active' | 'inactive';
-  companyId: string;
+  company_id: string;
 }
 
 export interface Attendance {
@@ -68,6 +72,8 @@ export interface Attendance {
   marked_by_supervisor: string;
   marked_by_owner: string;
   company_id: string;
+  in_time?: string;
+  out_time?: string;
 }
 
 export interface PayHistory {

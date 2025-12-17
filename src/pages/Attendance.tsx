@@ -3,7 +3,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { Employee, Attendance as AttendanceType, AttendanceStatus } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon, Save } from 'lucide-react';
@@ -17,8 +16,14 @@ const Attendance: React.FC = () => {
   const [date, setDate] = useState<Date>(new Date());
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [attendance, setAttendance] = useState<Record<string, AttendanceStatus>>({});
+  const [inTime, setInTime] = useState<Record<string, string>>({});
+  const [outTime, setOutTime] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const dateStr = format(date, 'yyyy-MM-dd');
+
+  const DEFAULT_IN_TIME = '10:00';
+const DEFAULT_OUT_TIME = '17:00';
+
 
   useEffect(() => {
     if (company) {
@@ -44,8 +49,28 @@ const Attendance: React.FC = () => {
     }
 
     setEmployees(companyEmployees);
-  };
 
+    setInTime(prev => {
+    const updated = { ...prev };
+    companyEmployees.forEach(e => {
+      if (!updated[e.employee_id]) {
+        updated[e.employee_id] = DEFAULT_IN_TIME;
+      }
+    });
+    return updated;
+  });
+
+  setOutTime(prev => {
+    const updated = { ...prev };
+    companyEmployees.forEach(e => {
+      if (!updated[e.employee_id]) {
+        updated[e.employee_id] = DEFAULT_OUT_TIME;
+      }
+    });
+    return updated;
+  });
+  };
+  
   /** Fetch attendance from Supabase for selected date */
   const fetchAttendance = async () => {
     const { data, error } = await supabase
@@ -57,9 +82,19 @@ const Attendance: React.FC = () => {
     if (error) return console.error('Error fetching attendance:', error);
 
     const attendanceMap: Record<string, AttendanceStatus> = {};
+    const inMap: Record<string, string> = {};
+  const outMap: Record<string, string> = {};
+
     data?.forEach(a => {
       attendanceMap[a.employee_id] = a.status;
+      if (a.in_time) {
+        inMap[a.employee_id] = a.in_time;
+      } if (a.out_time) {
+        outMap[a.employee_id] = a.out_time;
+      }
     });
+    setInTime(inMap);
+    setOutTime(outMap);
     setAttendance(attendanceMap);
   };
 
@@ -91,6 +126,12 @@ const Attendance: React.FC = () => {
       company_id: company!.company_id,
       date: dateStr,
       status,
+      in_time:status === 'A'? '00:00' : inTime[employee_id] || null,
+      out_time: status === 'A'? '00:00' : outTime[employee_id] || null,
+      work_hours:
+      attendance[employee_id] === 'P'
+        ? calculateWorkHours(inTime[employee_id], outTime[employee_id])
+        : 0,
       marked_by_owner: role === 'OWNER' ? user.id : null,
       marked_by_supervisor: role === 'SUPERVISOR' ? user.id : null,
     }));
@@ -113,6 +154,38 @@ const Attendance: React.FC = () => {
       });
     }
   };
+
+  const handleTimeChange = (
+  employee_id: string,
+  type: 'in' | 'out',
+  value: string
+) => {
+  if (type === 'in') {
+    setInTime(prev => ({ ...prev, [employee_id]: value }));
+  } else {
+    setOutTime(prev => ({ ...prev, [employee_id]: value }));
+  }
+};
+
+const calculateWorkHours = (
+  inTime?: string,
+  outTime?: string
+): number | null => {
+  if (!inTime || !outTime) return null;
+
+  const [inH, inM] = inTime.split(':').map(Number);
+  const [outH, outM] = outTime.split(':').map(Number);
+
+  const inMinutes = inH * 60 + inM;
+  const outMinutes = outH * 60 + outM;
+
+  if (outMinutes <= inMinutes) return null;
+
+  const diffMinutes = outMinutes - inMinutes;
+  return Number((diffMinutes / 60).toFixed(2));
+};
+
+
 
   return (
     <div className="space-y-6">
@@ -179,6 +252,92 @@ const Attendance: React.FC = () => {
                       Absent
                     </Button>
                   </div>
+
+                  {attendance[employee.employee_id] === 'P' && (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 ml-3">
+
+  {/* In Time */}
+  <div className="relative">
+  {!inTime[employee.employee_id] && (
+<span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground pointer-events-none">
+      In Time
+    </span>
+  )}
+
+  <input
+    type="time"
+    value={inTime[employee.employee_id] || ''}
+    onChange={(e) =>
+      setInTime(prev => ({
+        ...prev,
+        [employee.employee_id]: e.target.value,
+      }))
+    }
+     onClick={(e) => {
+    // Open time picker when clicking anywhere
+    (e.currentTarget as HTMLInputElement).showPicker?.();
+  }}
+    className={cn(
+      "w-full h-[38px] rounded-md border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring",
+      !inTime[employee.employee_id] && "text-transparent"
+    )}
+  />
+</div>
+
+
+  {/* Out Time */}
+  <div className="relative">
+  {!outTime[employee.employee_id] && (
+<span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-muted-foreground pointer-events-none">
+      Out Time
+    </span>
+  )}
+
+  <input
+    type="time"
+    value={outTime[employee.employee_id] || ''}
+    onChange={(e) =>
+      setOutTime(prev => ({
+        ...prev,
+        [employee.employee_id]: e.target.value,
+      }))
+    }
+     onClick={(e) => {
+    // Open time picker when clicking anywhere
+    (e.currentTarget as HTMLInputElement).showPicker?.();
+  }}
+    className={cn(
+      "w-full h-[38px] rounded-md border bg-background px-4 text-sm focus:outline-none focus:ring-1 focus:ring-ring",
+      !outTime[employee.employee_id] && "text-transparent"
+    )}
+  />
+</div>
+
+
+  {/* Work Hours */}
+  <div className="relative">
+    {!calculateWorkHours(
+      inTime[employee.employee_id],
+      outTime[employee.employee_id]
+    ) && (
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+        Work Hours
+      </span>
+    )}
+
+    <div className="w-full h-[38px] rounded-md border bg-muted px-3 flex items-center text-sm">
+      {calculateWorkHours(
+        inTime[employee.employee_id],
+        outTime[employee.employee_id]
+      ) || ''}
+    </div>
+  </div>
+
+</div>
+
+
+)}
+
                 </div>
               ))
             )}

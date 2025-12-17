@@ -25,7 +25,7 @@ const Sidebar: React.FC = () => {
     { icon: Users, label: 'Employees', path: '/employees', roles: ['OWNER', 'SUPERVISOR'] },
     { icon: UserCog, label: 'Supervisors', path: '/supervisors', roles: ['OWNER'] },
     { icon: UserCircle, label: 'My Profile', path: '/profile', roles: ['SUPERVISOR'] },
-    { icon: ClipboardList, label: 'Attendance', path: '/attendance', roles: ['OWNER', 'SUPERVISOR'] },
+    { icon: ClipboardList, label: 'Manage Presence', path: '/attendance', roles: ['OWNER', 'SUPERVISOR'] },
     { icon: Calendar, label: 'Attendance History', path: '/attendance-history', roles: ['OWNER', 'SUPERVISOR'] },
     { icon: FileText, label: 'Reports', path: '/reports', roles: ['OWNER'] },
     { icon: Settings, label: 'Settings', path: '/settings', roles: ['OWNER', 'SUPERVISOR'] },

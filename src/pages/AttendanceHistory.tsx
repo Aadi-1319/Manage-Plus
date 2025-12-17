@@ -232,6 +232,11 @@ export default function AttendanceHistory() {
 
                       <div className="grid grid-cols-7 gap-2">
                         {daysInMonth.map(day => {
+
+                          const record = attendanceRecords.find(r =>
+                          r.employee_id === employee.employee_id &&
+                          isSameDay(new Date(r.date), day)
+                          );
                           const status = getAttendanceStatus(employee.employee_id, day);
                           const isToday = isSameDay(day, today);
                           const isFutureDate = day > today;
@@ -251,6 +256,20 @@ export default function AttendanceHistory() {
                             >
                               <span className="font-medium">{format(day, 'd')}</span>
                               <span className="text-xs">{format(day, 'EEE')}</span>
+
+                              {/* Show in/out time only if present */}
+                            {status === 'P' && record && (
+                              <div className="mt-2 flex flex-col items-center justify-center text-[10px] space-y-1">
+                                <div className="flex items-center gap-1 bg-white/20 rounded px-1 py-0.5 font-medium text-white">
+                                  <span>In:</span>
+                                  <span>{record.in_time}</span>
+                                </div>
+                                <div className="flex items-center gap-1 bg-white/20 rounded px-1 py-0.5 font-medium text-white">
+                                  <span>Out:</span>
+                                  <span>{record.out_time}</span>
+                                </div>
+                              </div>
+                            )}
                             </div>
                           );
                         })}

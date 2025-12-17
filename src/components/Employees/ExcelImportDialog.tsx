@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import * as XLSX from 'xlsx';
 import { z } from 'zod';
 import type { Employee, EmployeeType } from '@/types';
+import { supabase } from '@/lib/supabaseClient';
 
 interface ExcelImportDialogProps {
   open: boolean;
@@ -47,7 +48,7 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
   onOpenChange, 
   onImportComplete 
 }) => {
-  const { company } = useAuth();
+  const { company,user ,role} = useAuth();
   const { toast } = useToast();
   const [file, setFile] = useState<File | null>(null);
   const [importing, setImporting] = useState(false);
@@ -73,30 +74,36 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
 
   const downloadTemplate = () => {
     const template = [
-      {
-        name: 'John Doe',
-        mobile: '9876543210',
-        aadhar: '123456789012',
-        pan: 'ABCDE1234F',
-        address: '123 Street, City',
-        type: 'FIXED',
-        salary: 30000,
-        dailyRate: '',
-        supervisorId: '',
-        joinDate: '2024-01-01',
-      },
-      {
-        name: 'Jane Smith',
-        mobile: '9876543211',
-        aadhar: '123456789013',
-        pan: 'ABCDE1234G',
-        address: '456 Avenue, City',
-        type: 'DAILY',
-        salary: '',
-        dailyRate: 500,
-        supervisorId: '',
-        joinDate: '2024-01-15',
-      },
+  {
+    full_name: 'Rohan Sharma',
+    mobile: '9876543210',
+    aadhar: '123412341234',
+    pan: 'ABCDE1234F',
+    address: '12 MG Road',
+    city: 'Mumbai',
+    state: 'Maharashtra',
+    zipcode: '400001',
+    employment_type: 'FIXED',
+    monthly_salary: 35000,
+    daily_rate: '',
+    join_date: '2024-01-01',
+    status: 'active',
+  },
+  {
+    full_name: 'Priya Verma',
+    mobile: '9876543211',
+    aadhar: '123412341235',
+    pan: 'ABCDE1234G',
+    address: '45 Connaught Place',
+    city: 'New Delhi',
+    state: 'Delhi',
+    zipcode: '110001',
+    employment_type: 'DAILY',
+    monthly_salary: '',
+    daily_rate: 600,
+    join_date: '2024-02-10',
+    status: 'active',
+  },
     ];
 
     const ws = XLSX.utils.json_to_sheet(template);
@@ -106,124 +113,155 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
   };
 
   const handleImport = async () => {
-    if (!file || !company) return;
+  if (!file || !company) return;
 
-    setImporting(true);
-    setImportErrors([]);
-    setSuccessCount(0);
+  setImporting(true);
+  setImportErrors([]);
+  setSuccessCount(0);
 
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[sheetName];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet);
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[sheetName];
+    const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-      const errors: ImportError[] = [];
-      const validEmployees: Employee[] = [];
+    const errors: ImportError[] = [];
+    const validEmployees: Employee[] = [];
 
-      jsonData.forEach((row: any, index: number) => {
-        const rowNumber = index + 2; // +2 because Excel rows start at 1 and we have a header
-        
-        try {
-          // Validate the row data
-          const validatedData = employeeSchema.parse({
-            name: row.name,
-            mobile: String(row.mobile).trim(),
-            aadhar: row.aadhar ? String(row.aadhar).trim() : '',
-            pan: row.pan ? String(row.pan).trim().toUpperCase() : '',
-            address: row.address || '',
-            type: String(row.type).toUpperCase(),
-            salary: row.salary ? Number(row.salary) : undefined,
-            dailyRate: row.dailyRate ? Number(row.dailyRate) : undefined,
-            supervisorId: row.supervisorId || '',
-            joinDate: row.joinDate,
-          });
+     const { data: existingEmployees, error: fetchError } = await supabase
+      .from('employee')
+      .select('mobile')
+      .eq('company_id', company.company_id);
 
-          // Additional validation for type-specific fields
-          if (validatedData.type === 'FIXED' && !validatedData.salary) {
-            throw new Error('Salary is required for FIXED type employees');
-          }
-          if (validatedData.type === 'DAILY' && !validatedData.dailyRate) {
-            throw new Error('Daily rate is required for DAILY type employees');
-          }
+    if (fetchError) throw fetchError;
 
-          // Create employee object
-          const newEmployee: Employee = {
-            employee_id: `emp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            full_name: validatedData.name,
-            mobile: validatedData.mobile,
-            aadhar: validatedData.aadhar || undefined,
-            pan: validatedData.pan || undefined,
-            address: validatedData.address || undefined,
-            employment_type: validatedData.type as EmployeeType,
-            monthly_salary: validatedData.salary,
-            daily_rate: validatedData.dailyRate,
-            supervisorId: validatedData.supervisorId || undefined,
-            join_date: validatedData.joinDate,
-            status: 'active',
-            companyId: company.id,
-          };
+    const existingMobiles = new Set(
+      (existingEmployees || []).map(e => String(e.mobile).trim())
+    );
 
-          validEmployees.push(newEmployee);
-        } catch (error) {
-          if (error instanceof z.ZodError) {
-            errors.push({
-              row: rowNumber,
-              errors: error.errors.map(e => `${e.path.join('.')}: ${e.message}`),
-            });
-          } else if (error instanceof Error) {
-            errors.push({
-              row: rowNumber,
-              errors: [error.message],
-            });
-          }
+    /* ---------- TRACK DUPLICATES IN EXCEL ---------- */
+    const excelMobiles = new Set<string>();
+
+    /* ---------- PROCESS ROWS ---------- */
+    jsonData.forEach((row: any, index: number) => {
+      const rowNumber = index + 2;
+      const mobile = String(row.mobile).trim();
+
+      try {
+        /* --- SILENT SKIP: DUPLICATE IN DB --- */
+        if (existingMobiles.has(mobile)) return;
+
+        /* --- SILENT SKIP: DUPLICATE IN EXCEL --- */
+        if (excelMobiles.has(mobile)) return;
+        excelMobiles.add(mobile);
+
+        /* --- VALIDATION --- */
+        const validatedData = employeeSchema.parse({
+          name: row.full_name,
+          mobile,
+          aadhar: row.aadhar ? String(row.aadhar).trim() : '',
+          pan: row.pan ? String(row.pan).trim().toUpperCase() : '',
+          address: row.address || '',
+          city: row.city || '',
+          state: row.state || '',
+          zipcode: row.zipcode || '',
+          type: String(row.employment_type).toUpperCase(),
+          salary: row.monthly_salary ? Number(row.monthly_salary) : undefined,
+          dailyRate: row.daily_rate ? Number(row.daily_rate) : undefined,
+          joinDate: row.join_date,
+        });
+
+        if (validatedData.type === 'FIXED' && !validatedData.salary) {
+          throw new Error('Salary is required for FIXED type employees');
         }
-      });
+        if (validatedData.type === 'DAILY' && !validatedData.dailyRate) {
+          throw new Error('Daily rate is required for DAILY type employees');
+        }
 
-      // Save valid employees
-      if (validEmployees.length > 0) {
-        const existingEmployees = JSON.parse(localStorage.getItem('employees') || '[]');
-        localStorage.setItem('employees', JSON.stringify([...existingEmployees, ...validEmployees]));
-        setSuccessCount(validEmployees.length);
+        const newEmployee: Employee = {
+          full_name: validatedData.name,
+          mobile: validatedData.mobile,
+          aadhar: validatedData.aadhar || undefined,
+          pan: validatedData.pan || undefined,
+          address: validatedData.address || undefined,
+          city: row.city || undefined,
+          state: row.state || undefined,
+          zipcode: row.zipcode || undefined,
+          employment_type: validatedData.type as EmployeeType,
+          monthly_salary: validatedData.salary,
+          daily_rate: validatedData.dailyRate,
+          join_date: validatedData.joinDate,
+          company_id: company.company_id,
+          status: 'active',
+          supervisor_id: role === 'SUPERVISOR' ? user.id : undefined,
+          owner_id: role === 'OWNER' ? user.id : undefined
+        };
+
+        validEmployees.push(newEmployee);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          errors.push({
+            row: rowNumber,
+            errors: error.errors.map(e => `${e.path.join('.')}: ${e.message}`),
+          });
+        } else if (error instanceof Error) {
+          errors.push({ row: rowNumber, errors: [error.message] });
+        }
       }
+    });
 
-      setImportErrors(errors);
+    if (validEmployees.length > 0) {
+      const { error } = await supabase.from('employee').insert(validEmployees);
 
-      if (errors.length === 0) {
-        toast({
-          title: 'Import successful',
-          description: `Successfully imported ${validEmployees.length} employees`,
-        });
-        onImportComplete();
-        setTimeout(() => {
-          onOpenChange(false);
-          setFile(null);
-        }, 2000);
-      } else if (validEmployees.length > 0) {
-        toast({
-          title: 'Partial import',
-          description: `Imported ${validEmployees.length} employees with ${errors.length} errors`,
-          variant: 'destructive',
-        });
-        onImportComplete();
-      } else {
+      if (error) {
         toast({
           title: 'Import failed',
-          description: 'No valid employees found in the file',
+          description: error.message,
           variant: 'destructive',
         });
+      } else {
+        setSuccessCount(validEmployees.length);
       }
-    } catch (error) {
+    }
+
+    setImportErrors(errors);
+
+    if (errors.length === 0) {
       toast({
-        title: 'Import failed',
-        description: error instanceof Error ? error.message : 'Failed to process Excel file',
+        title: 'Import successful',
+        description: `Successfully imported ${validEmployees.length} employees`,
+      });
+      onImportComplete();
+      setTimeout(() => {
+        onOpenChange(false);
+        setFile(null);
+      }, 1000);
+    } else if (validEmployees.length > 0) {
+      toast({
+        title: 'Partial import',
+        description: `Imported ${validEmployees.length} employees with ${errors.length} errors`,
         variant: 'destructive',
       });
-    } finally {
-      setImporting(false);
+      onImportComplete();
+    } else {
+      toast({
+        title: 'Import failed',
+        description: 'No valid employees found in the file',
+        variant: 'destructive',
+      });
     }
-  };
+  } catch (error) {
+    toast({
+      title: 'Import failed',
+      description: error instanceof Error ? error.message : 'Failed to process Excel file',
+      variant: 'destructive',
+    });
+  } finally {
+    setImporting(false);
+  }
+};
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
