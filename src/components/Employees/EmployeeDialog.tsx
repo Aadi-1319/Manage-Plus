@@ -215,19 +215,24 @@ const { company, user ,role} = useAuth();
 </div>
 
 
-            <div className="space-y-2">
-              <Label>Employment Type *</Label>
-              <Select
-                value={formData.employment_type}
-                onValueChange={(value: any) => handleChange('type', value as 'FIXED' | 'DAILY')}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="FIXED">Fixed Salary</SelectItem>
-                  <SelectItem value="DAILY">Daily Wage</SelectItem>
-                </SelectContent>
+           <div className="space-y-2">
+             <Label>Employment Type *</Label>
+               <Select
+                  value={formData.employment_type}
+                  onValueChange={(value) =>
+                   handleChange('employment_type', value as 'FIXED' | 'DAILY')
+                   }
+                >
+                 <SelectTrigger>
+                 <SelectValue placeholder="Select employment type" />
+               </SelectTrigger>
+                 <SelectContent>
+                 <SelectItem value="FIXED">Fixed Salary</SelectItem>
+                 <SelectItem value="DAILY">Daily Wage</SelectItem>
+               </SelectContent>
               </Select>
             </div>
+
 
             {formData.employment_type === 'FIXED' ? (
               <div className="space-y-2">

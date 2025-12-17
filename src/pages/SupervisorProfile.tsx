@@ -1,15 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/lib/supabaseClient";
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Button } from '@/components/ui/button';
-import { Employee, Attendance } from '@/types';
-import { User, Users, Calendar, Clock, Download, FileText, FileSpreadsheet } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+
+import {
+  Users,
+  Calendar,
+  Clock,
+  FileText,
+  FileSpreadsheet,
+  User,
+} from "lucide-react";
+
 import {
   Table,
   TableBody,
@@ -17,20 +28,42 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
+
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
+interface Employee {
+  employee_id: string;
+  full_name: string;
+  phone: string;
+  employment_type: "FIXED" | "DAILY";
+  status: "ACTIVE" | "INACTIVE";
+  aadhar?: string;
+  pan?: string;
+}
+
+interface AttendanceRow {
+  attendance_id: string;
+  date: string;
+  status: "P" | "A";
+  employee_id: string;
+}
 
 interface ActivityRecord {
   id: string;
   date: string;
-  action: string;
   employeeName: string;
   status: string;
 }
 
 const SupervisorProfile: React.FC = () => {
   const { user, company } = useAuth();
-  const [assignedEmployees, setAssignedEmployees] = useState<Employee[]>([]);
-  const [activityHistory, setActivityHistory] = useState<ActivityRecord[]>([]);
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [Sup_name, setSup_name]= useState("");
+  const [activities, setActivities] = useState<ActivityRecord[]>([]);
   const [stats, setStats] = useState({
     totalAssigned: 0,
     activeEmployees: 0,
@@ -38,360 +71,234 @@ const SupervisorProfile: React.FC = () => {
   });
 
   useEffect(() => {
-    loadProfileData();
-  }, [company, user]);
-
-  const loadProfileData = () => {
     if (!user || !company) return;
+    loadProfileData();
+   fetchSupervisorName();
+  }, [user, company]);
 
-    // Load assigned employees
-    const allEmployees: Employee[] = JSON.parse(localStorage.getItem('employees') || '[]');
-    const assigned = allEmployees.filter(
-      e => e.supervisorId === user.id && e.companyId === company.id
+const fetchSupervisorName = async () => {
+  const { data, error } = await supabase
+    .from("supervisor") // check your table spelling, probably "supervisor"
+    .select("full_name")
+    .eq("supervisor_id", user.id)
+    .single(); // use .single() if you expect only one row
+
+  if (error) {
+    console.error("Error fetching supervisor:", error);
+    return;
+  }
+
+  setSup_name(data.full_name); // now set state
+};
+
+
+  const loadProfileData = async () => {
+    /* ================================
+       1️⃣ FETCH ASSIGNED EMPLOYEES
+    ================================= */
+    const { data: empData, error: empErr } = await supabase
+      .from("employee")
+      .select("*")
+      .eq("company_id", company.company_id)
+      .eq("supervisor_id", user.id);
+
+    if (empErr) {
+      console.error("Employee fetch failed:", empErr);
+      return;
+    }
+
+    setEmployees(empData);
+
+    const activeCount = empData.filter(
+      (e) => e.status === "ACTIVE"
+    ).length;
+
+    /* ================================
+       2️⃣ EMPLOYEE LOOKUP MAP
+    ================================= */
+
+    const employeeMap: Record<string, string> = Object.fromEntries(
+      empData.map((e) => [e.employee_id, e.full_name])
     );
-    setAssignedEmployees(assigned);
 
-    // Calculate stats
-    const activeCount = assigned.filter(e => e.status === 'active').length;
+    /* ================================
+       3️⃣ FETCH RECENT ATTENDANCE
+    ================================= */
+   const { data: attData, error: attErr } = await supabase
+  .from("attendance")
+  .select(`
+    attendance_id,
+    date,
+    status,
+    employee:employee_id (
+      full_name
+    )
+  `)
+  .eq("company_id", company.company_id)
+  .eq("marked_by_supervisor", user.id)
+  .order("date", { ascending: false })
+  .limit(20);
+
+
+    if (attErr) {
+      console.error("Attendance fetch failed:", attErr);
+      return;
+    }
+
+    const activityList: ActivityRecord[] = attData.map(a => ({
+  id: a.attendance_id,
+  date: a.date,
+  employeeName: a.employee?.full_name ?? "Unknown",
+  status: a.status === "P" ? "Present" : "Absent",
+}));
+
+    setActivities(activityList);
+
     setStats({
-      totalAssigned: assigned.length,
+      totalAssigned: empData.length,
       activeEmployees: activeCount,
-      recentAttendance: 0,
+      recentAttendance: attData.length,
     });
-
-    // Load activity history (recent attendance markings)
-    const allAttendances: Attendance[] = JSON.parse(localStorage.getItem('attendances') || '[]');
-    const supervisorAttendances = allAttendances
-      .filter(a => a.markedBy === user.id && a.companyId === company.id)
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 20);
-
-    const activities: ActivityRecord[] = supervisorAttendances.map(a => {
-      const employee = allEmployees.find(e => e.id === a.employeeId);
-      return {
-        id: a.id,
-        date: a.date,
-        action: 'Attendance Marked',
-        employeeName: employee?.name || 'Unknown',
-        status: a.status === 'P' ? 'Present' : 'Absent',
-      };
-    });
-
-    setActivityHistory(activities);
   };
+
+  /* ================================
+     EXPORTS
+  ================================= */
 
   const exportEmployeesToExcel = () => {
-    const data = assignedEmployees.map(emp => ({
-      'Name': emp.name,
-      'Mobile': emp.mobile,
-      'Type': emp.type,
-      'Status': emp.status,
-      'Aadhar': emp.aadhar || '',
-      'PAN': emp.pan || '',
+    const data = employees.map((e) => ({
+      Name: e.full_name,
+      Phone: e.phone,
+      Type: e.employment_type,
+      Status: e.status,
+      Aadhar: e.aadhar ?? "",
+      PAN: e.pan ?? "",
     }));
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Employees');
-    XLSX.writeFile(wb, `Employees_${user?.fullName}_${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const exportEmployeesToPDF = () => {
-    const doc = new jsPDF();
-    
-    doc.setFontSize(16);
-    doc.text('Assigned Employees Report', 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Supervisor: ${user?.fullName}`, 14, 28);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 34);
-
-    const tableData = assignedEmployees.map(emp => [
-      emp.name,
-      emp.mobile,
-      emp.type,
-      emp.status,
-      emp.aadhar || '-',
-      emp.pan || '-',
-    ]);
-
-    autoTable(doc, {
-      startY: 40,
-      head: [['Name', 'Mobile', 'Type', 'Status', 'Aadhar', 'PAN']],
-      body: tableData,
-    });
-
-    doc.save(`Employees_${user?.fullName}_${new Date().toISOString().split('T')[0]}.pdf`);
-  };
-
-  const exportAttendanceToExcel = () => {
-    const data = activityHistory.map(activity => ({
-      'Date': new Date(activity.date).toLocaleDateString(),
-      'Action': activity.action,
-      'Employee': activity.employeeName,
-      'Status': activity.status,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Attendance');
-    XLSX.writeFile(wb, `Attendance_${user?.fullName}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Employees");
+    XLSX.writeFile(wb, "assigned_employees.xlsx");
   };
 
   const exportAttendanceToPDF = () => {
     const doc = new jsPDF();
-    
-    doc.setFontSize(16);
-    doc.text('Attendance History Report', 14, 20);
-    doc.setFontSize(10);
-    doc.text(`Supervisor: ${user?.fullName}`, 14, 28);
-    doc.text(`Date: ${new Date().toLocaleDateString()}`, 14, 34);
-
-    const tableData = activityHistory.map(activity => [
-      new Date(activity.date).toLocaleDateString(),
-      activity.action,
-      activity.employeeName,
-      activity.status,
-    ]);
+    doc.text("Attendance History", 14, 20);
 
     autoTable(doc, {
-      startY: 40,
-      head: [['Date', 'Action', 'Employee', 'Status']],
-      body: tableData,
+      startY: 30,
+      head: [["Date", "Employee", "Status"]],
+      body: activities.map((a) => [
+        new Date(a.date).toLocaleDateString(),
+        a.employeeName,
+        a.status,
+      ]),
     });
 
-    doc.save(`Attendance_${user?.fullName}_${new Date().toISOString().split('T')[0]}.pdf`);
+    doc.save("attendance_history.pdf");
   };
 
-  if (!user) {
-    return null;
-  }
+  if (!user) return null;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">My Profile</h1>
-        <p className="text-muted-foreground mt-1">View your details and activity</p>
-      </div>
-
-      {/* Profile Details Card */}
+      {/* PROFILE */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="w-5 h-5" />
-            Personal Information
+          <CardTitle className="flex gap-2 items-center">
+            <User className="w-5 h-5" /> My Profile
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-              <p className="text-lg font-semibold">{user.fullName}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Email</p>
-              <p className="text-lg">{user.email}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Role</p>
-              <Badge variant="secondary">{user.role}</Badge>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Joined On</p>
-              <p className="text-lg">{new Date(user.createdAt).toLocaleDateString()}</p>
-            </div>
+        <CardContent className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-muted-foreground text-sm">Name</p>
+            <p className="font-semibold">{Sup_name}</p>
           </div>
-
-          <Separator className="my-4" />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {user.aadhar && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Aadhar Number</p>
-                <p className="text-lg font-mono">{user.aadhar}</p>
-              </div>
-            )}
-            {user.pan && (
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">PAN Number</p>
-                <p className="text-lg font-mono">{user.pan}</p>
-              </div>
-            )}
+          <div>
+            <p className="text-muted-foreground text-sm">Email</p>
+            <p>{user.email}</p>
           </div>
-
-          {user.address && (
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Address</p>
-              <p className="text-lg">{user.address}</p>
-            </div>
-          )}
         </CardContent>
       </Card>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Employees
-            </CardTitle>
-            <Users className="w-5 h-5 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.totalAssigned}</div>
-            <p className="text-xs text-muted-foreground mt-1">Assigned to you</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Active Employees
-            </CardTitle>
-            <Users className="w-5 h-5 text-secondary" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{stats.activeEmployees}</div>
-            <p className="text-xs text-muted-foreground mt-1">Currently active</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Activities Logged
-            </CardTitle>
-            <Calendar className="w-5 h-5 text-accent" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{activityHistory.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Recent actions</p>
-          </CardContent>
-        </Card>
+      {/* STATS */}
+      <div className="grid grid-cols-3 gap-6">
+        <Stat title="Total Employees" value={stats.totalAssigned} icon={Users} />
+        <Stat title="Active Employees" value={stats.activeEmployees} icon={Users} />
+        <Stat title="Recent Activities" value={stats.recentAttendance} icon={Calendar} />
       </div>
 
-      {/* Assigned Employees */}
+      {/* EMPLOYEES */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              Assigned Employees ({assignedEmployees.length})
-            </CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportEmployeesToExcel}
-                disabled={assignedEmployees.length === 0}
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Excel
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportEmployeesToPDF}
-                disabled={assignedEmployees.length === 0}
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-          </div>
+        <CardHeader className="flex justify-between flex-row">
+          <CardTitle>Assigned Employees</CardTitle>
+          <Button size="sm" onClick={exportEmployeesToExcel}>
+            <FileSpreadsheet className="w-4 h-4 mr-2" /> Excel
+          </Button>
         </CardHeader>
-        <CardContent>
-          {assignedEmployees.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No employees assigned yet
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {assignedEmployees.map(employee => (
-                <Card key={employee.id} className="border-2">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="font-semibold">{employee.name}</p>
-                        <p className="text-sm text-muted-foreground">{employee.mobile}</p>
-                        <Badge variant={employee.status === 'active' ? 'default' : 'secondary'} className="mt-2">
-                          {employee.status}
-                        </Badge>
-                      </div>
-                      <Badge variant="outline">{employee.type}</Badge>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+        <CardContent className="grid grid-cols-3 gap-4">
+          {employees.map((e) => (
+            <Card key={e.employee_id}>
+              <CardContent className="pt-4">
+                <p className="font-semibold">{e.full_name}</p>
+                <p className="text-sm text-muted-foreground">{e.phone}</p>
+                <Badge className="mt-2">{e.status}</Badge>
+              </CardContent>
+            </Card>
+          ))}
         </CardContent>
       </Card>
 
-      {/* Activity History */}
+      {/* ACTIVITY */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Recent Activity
-            </CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportAttendanceToExcel}
-                disabled={activityHistory.length === 0}
-              >
-                <FileSpreadsheet className="w-4 h-4 mr-2" />
-                Excel
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportAttendanceToPDF}
-                disabled={activityHistory.length === 0}
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                PDF
-              </Button>
-            </div>
-          </div>
+        <CardHeader className="flex justify-between flex-row">
+          <CardTitle>Recent Activity</CardTitle>
+          <Button size="sm" onClick={exportAttendanceToPDF}>
+            <FileText className="w-4 h-4 mr-2" /> PDF
+          </Button>
         </CardHeader>
         <CardContent>
-          {activityHistory.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No recent activity
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Action</TableHead>
-                  <TableHead>Employee</TableHead>
-                  <TableHead>Status</TableHead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Employee</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {activities.map((a) => (
+                <TableRow key={a.id}>
+                  <TableCell>{new Date(a.date).toLocaleDateString()}</TableCell>
+                  <TableCell>{a.employeeName}</TableCell>
+                  <TableCell>
+                    <Badge variant={a.status === "Present" ? "default" : "destructive"}>
+                      {a.status}
+                    </Badge>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activityHistory.map((activity) => (
-                  <TableRow key={activity.id}>
-                    <TableCell>{new Date(activity.date).toLocaleDateString()}</TableCell>
-                    <TableCell>{activity.action}</TableCell>
-                    <TableCell className="font-medium">{activity.employeeName}</TableCell>
-                    <TableCell>
-                      <Badge variant={activity.status === 'Present' ? 'default' : 'destructive'}>
-                        {activity.status}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
   );
 };
+
+/* ================================
+   SMALL STAT COMPONENT
+================================= */
+const Stat = ({ title, value, icon: Icon }: any) => (
+  <Card>
+    <CardHeader className="flex flex-row justify-between pb-2">
+      <CardTitle className="text-sm">{title}</CardTitle>
+      <Icon className="w-4 h-4" />
+    </CardHeader>
+    <CardContent>
+      <div className="text-2xl font-bold">{value}</div>
+    </CardContent>
+  </Card>
+);
 
 export default SupervisorProfile;
