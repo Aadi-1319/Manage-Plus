@@ -287,7 +287,7 @@ const exportToExcel = (employees: any[]) => {
                 onDelete={handleDelete}
                 onViewHistory={handleViewHistory}
                 canEdit={role === 'SUPERVISOR' || role === 'OWNER'}
-                showHistory={false}
+                showHistory={true}
               />
             </TabsContent>
             <TabsContent value="inactive">

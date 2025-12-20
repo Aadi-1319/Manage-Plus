@@ -21,23 +21,76 @@ const Signup: React.FC = () => {
   });
 
   const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const { signup } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
 
   // Step 1 → Step 2
   const handleNext = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (formData.fullName && formData.email && formData.password) {
-      setStep(2);
-    }
-  };
+  e.preventDefault();
+  if (validateStep1()) {
+    setStep(2);
+    setErrors({});
+  }
+};
 
-  const handleBack = () => setStep(1);
+const handleBack = () => {
+  setStep(1);
+  setErrors({});
+};
+
+  const validateStep1 = () => {
+  const newErrors: Record<string, string> = {};
+
+  if (!formData.fullName.trim()) {
+    newErrors.fullName = 'Full name is required';
+  }
+
+  if (!formData.phone.trim()) {
+    newErrors.phone = 'Phone number is required';
+  } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+    newErrors.phone = 'Enter a valid 10-digit Indian mobile number';
+  }
+
+  if (!formData.email.trim()) {
+    newErrors.email = 'Email is required';
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    newErrors.email = 'Enter a valid email address';
+  }
+
+  if (!formData.password.trim()) {
+    newErrors.password = 'Password is required';
+  } else if (formData.password.length < 6) {
+    newErrors.password = 'Password must be at least 6 characters';
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
+
+const validateStep2 = () => {
+  const newErrors: Record<string, string> = {};
+
+  if (!formData.companyName.trim()) {
+    newErrors.companyName = 'Company name is required';
+  }
+
+  if (formData.gstNo && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(formData.gstNo)) {
+    newErrors.gstNo = 'Invalid GST number format';
+  }
+
+  setErrors(newErrors);
+  return Object.keys(newErrors).length === 0;
+};
+
 
   // Final submit
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!validateStep2()) return;
+
     setLoading(true);
 
     try {
@@ -72,12 +125,21 @@ const Signup: React.FC = () => {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.id]: e.target.value,
-    }));
-  };
+ const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const { id, value } = e.target;
+
+  setFormData(prev => ({
+    ...prev,
+    [id]: id === 'gstNo' ? value.toUpperCase() : value,
+  }));
+
+  // Optional: clear error as user types
+  setErrors(prev => ({
+    ...prev,
+    [id]: undefined,
+  }));
+};
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -98,100 +160,111 @@ const Signup: React.FC = () => {
         <CardContent>
           {/* STEP 1 */}
           {step === 1 ? (
-            <form onSubmit={handleNext} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
-                <Input
-                  id="fullName"
-                  value={formData.fullName}
-                  onChange={handleChange}
-                  placeholder="John Doe"
-                  required
-                />
-              </div>
+           <form onSubmit={handleNext} className="space-y-4">
+  {/* Full Name */}
+  <div className="space-y-1">
+    <Label htmlFor="fullName">Full Name</Label>
+    <Input
+      id="fullName"
+      value={formData.fullName}
+      onChange={handleChange}
+      className={errors.fullName ? 'border-red-500' : ''}
+      placeholder="John Doe"
+    />
+    {errors.fullName && <p className="text-xs text-red-500">{errors.fullName}</p>}
+  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  placeholder="9876543210"
-                />
-              </div>
+  {/* Phone */}
+  <div className="space-y-1">
+    <Label htmlFor="phone">Phone</Label>
+    <Input
+      id="phone"
+      value={formData.phone}
+      onChange={handleChange}
+      className={errors.phone ? 'border-red-500' : ''}
+      placeholder="9876543210"
+    />
+    {errors.phone && <p className="text-xs text-red-500">{errors.phone}</p>}
+  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  placeholder="name@example.com"
-                  required
-                />
-              </div>
+  {/* Email */}
+  <div className="space-y-1">
+    <Label htmlFor="email">Email</Label>
+    <Input
+      id="email"
+      type="email"
+      value={formData.email}
+      onChange={handleChange}
+      className={errors.email ? 'border-red-500' : ''}
+      placeholder="name@example.com"
+    />
+    {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
+  {/* Password */}
+  <div className="space-y-1">
+    <Label htmlFor="password">Password</Label>
+    <Input
+      id="password"
+      type="password"
+      value={formData.password}
+      onChange={handleChange}
+      className={errors.password ? 'border-red-500' : ''}
+      placeholder="••••••••"
+    />
+    {errors.password && <p className="text-xs text-red-500">{errors.password}</p>}
+  </div>
 
-              <Button className="w-full" type="submit">Next</Button>
-            </form>
+  <Button className="w-full" type="submit">Next</Button>
+</form>
+
           ) : (
             /* STEP 2 */
             <form onSubmit={handleSubmit} className="space-y-4">
+  <div className="space-y-1">
+    <Label htmlFor="companyName">Company Name</Label>
+    <Input
+      id="companyName"
+      value={formData.companyName}
+      onChange={handleChange}
+      className={errors.companyName ? 'border-red-500' : ''}
+      placeholder="Your Company Pvt Ltd"
+    />
+    {errors.companyName && <p className="text-xs text-red-500">{errors.companyName}</p>}
+  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Company Name (Required)</Label>
-                <Input
-                  id="companyName"
-                  value={formData.companyName}
-                  onChange={handleChange}
-                  placeholder="Your Company Pvt Ltd"
-                  required
-                />
-              </div>
+  <div className="space-y-1">
+    <Label htmlFor="gstNo">GST Number (Optional)</Label>
+    <Input
+      id="gstNo"
+      value={formData.gstNo}
+      onChange={handleChange}
+      className={errors.gstNo ? 'border-red-500' : ''}
+      placeholder="22AAAAA0000A1Z5"
+    />
+    {errors.gstNo && <p className="text-xs text-red-500">{errors.gstNo}</p>}
+  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="gstNo">GST Number (Optional)</Label>
-                <Input
-                  id="gstNo"
-                  value={formData.gstNo}
-                  onChange={handleChange}
-                  placeholder="22AAAAA0000A1Z5"
-                />
-              </div>
+  <div className="space-y-2">
+    <Label htmlFor="address">Address (Optional)</Label>
+    <Input
+      id="address"
+      value={formData.address}
+      onChange={handleChange}
+      placeholder="Company Address"
+    />
+  </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="address">Address (Optional)</Label>
-                <Input
-                  id="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  placeholder="Company Address"
-                />
-              </div>
+  <div className="flex gap-2">
+    <Button variant="outline" type="button" onClick={handleBack} className="w-full">
+      Back
+    </Button>
+    <Button type="submit" className="w-full" disabled={loading}>
+      {loading ? 'Creating...' : 'Create Account'}
+    </Button>
+  </div>
+</form>
 
-              <div className="flex gap-2">
-                <Button variant="outline" className="w-full" type="button" onClick={handleBack}>
-                  Back
-                </Button>
-
-                <Button className="w-full" type="submit" disabled={loading}>
-                  {loading ? 'Creating...' : 'Create Account'}
-                </Button>
-              </div>
-            </form>
           )}
 
           <div className="mt-4 text-center text-sm">

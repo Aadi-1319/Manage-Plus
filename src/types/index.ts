@@ -44,9 +44,9 @@ export interface Supervisor {
 }
 
 export interface subscription_data {
-  company_id: String;
-  owner_id :String;
-  plan_name: String;
+  company_id: string;
+  owner_id :string;
+  plan_name: string;
   expire_date? : Date;
   status? : 'active'|'expire'; 
 }

@@ -167,23 +167,34 @@ const DEFAULT_OUT_TIME = '17:00';
   }
 };
 
-const calculateWorkHours = (
-  inTime?: string,
-  outTime?: string
-): number | null => {
+/**
+ * Calculate total work hours between inTime and outTime
+ * Handles overnight shifts and proper minute conversion
+ */
+const calculateWorkHours = (inTime?: string, outTime?: string): number | null => {
   if (!inTime || !outTime) return null;
 
+  // Convert HH:MM to total minutes
   const [inH, inM] = inTime.split(':').map(Number);
   const [outH, outM] = outTime.split(':').map(Number);
 
-  const inMinutes = inH * 60 + inM;
-  const outMinutes = outH * 60 + outM;
+  const inDate = new Date();
+  inDate.setHours(inH, inM, 0, 0);
 
-  if (outMinutes <= inMinutes) return null;
+  const outDate = new Date();
+  outDate.setHours(outH, outM, 0, 0);
 
-  const diffMinutes = outMinutes - inMinutes;
-  return Number((diffMinutes / 60).toFixed(2));
+  // Handle overnight (e.g., in: 22:00, out: 06:00)
+  if (outDate <= inDate) {
+    outDate.setDate(outDate.getDate() + 1);
+  }
+
+  const diffMs = outDate.getTime() - inDate.getTime(); // milliseconds
+  const diffHours = diffMs / (1000 * 60 * 60); // convert to hours
+
+  return Number(diffHours.toFixed(2));
 };
+
 
 
 

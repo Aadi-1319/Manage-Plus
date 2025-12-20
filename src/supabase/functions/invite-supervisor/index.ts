@@ -16,31 +16,32 @@ Deno.serve(async (req) => {
   try {
     // 1️⃣ Check auth header
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Missing auth header" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
 
-    // 2️⃣ User client (for auth verification)
-    const userClient = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    );
+if (!authHeader) {
+  return new Response(JSON.stringify({ error: "Missing auth header" }), {
+    status: 401,
+    headers: corsHeaders,
+  });
+}
 
-    const {
-      data: { user },
-      error: userError,
-    } = await userClient.auth.getUser();
+const jwt = authHeader.replace("Bearer ", "");
 
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid user" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
+const userClient = createClient(
+  Deno.env.get("SUPABASE_URL")!,
+  Deno.env.get("SUPABASE_ANON_KEY")!
+);
+
+const {
+  data: { user },
+  error: userError,
+} = await userClient.auth.getUser(jwt);
+
+if (userError || !user) {
+  return new Response(JSON.stringify({ error: "Invalid user" }), {
+    status: 401,
+    headers: corsHeaders,
+  });
+}
 
     // 3️⃣ Check role in owner table
     const { data: owner, error: ownerError } = await userClient

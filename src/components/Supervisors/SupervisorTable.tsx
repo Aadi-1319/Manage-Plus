@@ -82,7 +82,7 @@ const SupervisorTable: React.FC<SupervisorTableProps> = ({ supervisors, onEdit, 
                   </AlertDialogHeader>
                   <AlertDialogFooter>
                     <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={() => onDelete(supervisor.supervisor_id)}>
+                    <AlertDialogAction onClick={() => onDelete(supervisor.email)}>
                       Delete
                     </AlertDialogAction>
                   </AlertDialogFooter>

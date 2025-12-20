@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, DollarSign, User, Phone, CreditCard, MapPin } from 'lucide-react';
+import { supabase } from '@/lib/supabaseClient';
 
 interface EmployeeHistoryDialogProps {
   open: boolean;
@@ -34,25 +35,49 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
   const [payHistory, setPayHistory] = useState<PayHistory[]>([]);
 
   useEffect(() => {
-    if (employee) {
+    if (employee && open) {
       loadHistory();
     }
-  }, [employee]);
+  }, [employee,open]);
 
-  const loadHistory = () => {
+  const loadHistory = async () => {
     if (!employee) return;
 
     // Load attendance records
-    const allAttendance: Attendance[] = JSON.parse(localStorage.getItem('attendance') || '[]');
-    const employeeAttendance = allAttendance
-      .filter(a => a.employeeId === employee.employee_id)
+const { data: attendanceData, error: attendanceError } = await supabase
+    .from('attendance')
+    .select('*')
+    .eq('employee_id', employee.employee_id)
+    .eq('company_id', employee.company_id)
+    .order('date', { ascending: false });
+
+  if (attendanceError) {
+    console.error('Attendance error:', attendanceError);
+  } else {
+    setAttendanceRecords(attendanceData || []);
+  }
+
+    const employeeAttendance = attendanceRecords
+      .filter(a => a.employee_id === employee.employee_id)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     setAttendanceRecords(employeeAttendance);
 
     // Load pay history
-    const allPayHistory: PayHistory[] = JSON.parse(localStorage.getItem('payHistory') || '[]');
-    const employeePayHistory = allPayHistory
-      .filter(p => p.employeeId === employee.employee_id)
+const { data: payData, error: payError } = await supabase
+    .from('pay_history')
+    .select('*')
+    .eq('employee_id', employee.employee_id)
+    .eq('company_id', employee.company_id)
+    .order('month', { ascending: false });
+
+  if (payError) {
+    console.error('Pay history error:', payError);
+  } else {
+    setPayHistory(payData || []);
+  }
+
+    const employeePayHistory = payHistory
+      .filter(p => p.employee_id === employee.employee_id)
       .sort((a, b) => b.month.localeCompare(a.month));
     setPayHistory(employeePayHistory);
   };
@@ -209,7 +234,7 @@ const EmployeeHistoryDialog: React.FC<EmployeeHistoryDialogProps> = ({
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-muted-foreground">
-                                {record.markedBy}
+                              {record.marked_by_supervisor || record.marked_by_owner || '-'}
                               </TableCell>
                             </TableRow>
                           ))}

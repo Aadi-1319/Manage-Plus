@@ -52,25 +52,41 @@ const Supervisors: React.FC = () => {
   );
 };
 
-
- const handleDelete = async (supervisor_id?: string) => {
-  if (!supervisor_id) {
-    console.error('Delete called with invalid id:', supervisor_id);
+const handleDelete = async (email?: string) => {
+  if (!email) {
+    console.error('Delete called with invalid id or email:', email);
     return;
   }
 
-  const { error } = await supabase
-    .from('supervisor')
-    .update({ status: 'DISABLED' })
-    .eq('supervisor_id', supervisor_id);
+  const session = (await supabase.auth.getSession()).data.session;
 
-  if (error) {
-    console.error(error);
-    return;
+if (!session) {
+  console.error('Not authenticated');
+  return;
+}
+
+  try {
+    const res = await fetch('https://cbfkbkywqndothzrydyv.supabase.co/functions/v1/delete-supervisor', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`, // <-- important
+      },
+      body: JSON.stringify({ email }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err?.error || 'Failed to delete supervisor');
+    }
+
+    await loadSupervisors(); // refresh the supervisor list
+    console.log('Supervisor deleted successfully!');
+  } catch (error) {
+    console.error('Error deleting supervisor:', error);
   }
-
-  await loadSupervisors(); // ✅ INSIDE async function
 };
+
 
 const handleEdit = (supervisor: Supervisor) => {
     console.log('Editing supervisor:', supervisor.supervisor_id);
