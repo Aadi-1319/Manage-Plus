@@ -24,6 +24,8 @@ const Reports: React.FC = () => {
     );
   }
 
+  let ownerName;
+
   /** Generate wage summary PDF */
   const generateWageReport = async () => {
     if (!company) return;
@@ -39,6 +41,7 @@ const Reports: React.FC = () => {
     // Fetch attendance for current month
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
     const monthEnd = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0);
+    const daysInMonth = monthEnd.getDate();
 
     const { data: attendance, error: attError } = await supabase
       .from<Attendance>('attendance')
@@ -53,59 +56,299 @@ const Reports: React.FC = () => {
     const tableData = employees?.map(emp => {
       const empAttendance = attendance?.filter(a => a.employee_id === emp.employee_id) || [];
       const presentDays = empAttendance.filter(a => a.status === 'P').length;
-      const dailyRate = emp.daily_rate || 0;
-      const monthlySalary = emp.monthly_salary || dailyRate * presentDays;
-      return [
+      const absentDays = daysInMonth - presentDays;
+      
+      let calculatedWage = 0;
+let deductions = 0;
+let finalPay = 0;
+
+if (emp.employment_type === 'FIXED' && emp.monthly_salary) {
+
+  // ❗ No attendance at all → no salary
+  if (presentDays === 0) {
+    finalPay = 0;
+  } else {
+    const dailyRate = emp.monthly_salary / daysInMonth;
+    deductions = dailyRate * absentDays;
+
+    calculatedWage = emp.monthly_salary;
+    finalPay = calculatedWage - deductions;
+  }
+}
+
+  if (emp.employment_type === 'DAILY' && emp.daily_rate) {
+  const hourlyRate = emp.daily_rate / 8; // standard 8-hour day
+
+  calculatedWage = empAttendance.reduce((sum, record) => {
+    const hours = record.work_hours ?? 0;
+    return sum + hours * hourlyRate;
+  }, 0);
+
+  finalPay = calculatedWage;
+}
+
+    
+    return [
         emp.full_name,
-        emp.employee_id,
+        emp.employment_type,
         presentDays.toString(),
-        monthlySalary.toString()
+        `${finalPay.toFixed(2)}`
       ];
     }) || [];
 
     // Create PDF
-    const doc = new jsPDF();
-    doc.setFontSize(16);
-    doc.text(`Wage Summary Report - ${format(new Date(), 'MMMM yyyy')}`, 14, 15);
-    autoTable(doc, {
-      startY: 25,
-      head: [['Employee Name', 'Employee ID', 'Present Days', 'Wage']],
-      body: tableData
-    });
-    doc.save(`wage-summary-${format(new Date(), 'yyyy-MM')}.pdf`);
+     const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  const generatedOn = format(new Date(), 'dd MMM yyyy, hh:mm a');
+
+  /* ---------- COMPANY HEADER ---------- */
+
+  doc.setFontSize(18);
+  doc.setTextColor(40, 40, 40);
+  doc.text(company.company_name.toUpperCase(), pageWidth / 2, 15, { align: 'center' });
+
+  doc.setFontSize(11);
+  doc.setTextColor(90);
+  doc.text(`GST No: ${company.gst_no || 'N/A'}`, pageWidth / 2, 22, { align: 'center' });
+  doc.text(company.address || '', pageWidth / 2, 28, { align: 'center' });
+
+  doc.line(14, 32, pageWidth - 14, 32);
+
+  /* ---------- REPORT INFO ---------- */
+
+  doc.setFontSize(14);
+  doc.setTextColor(33, 37, 41);
+  doc.text(
+    `Monthly Wage Report – ${format(new Date(), 'MMMM yyyy')}`,
+    14,
+    42
+  );
+
+  const { data: owner, error: ownerError } = await supabase
+  .from('owner')
+  .select('full_name')
+  .eq('owner_id', user.id)
+  .single();
+
+if (ownerError) {
+  console.error('Error fetching owner:', ownerError);
+}
+
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text(`Generated On: ${generatedOn}`, 14, 48);
+  doc.text(`Owner: ${owner.full_name || 'N/A'}`, pageWidth - 14, 48, {
+    align: 'right',
+  });
+
+  /* ---------- TABLE ---------- */
+
+  autoTable(doc, {
+    startY: 55,
+    head: [['Employee Name', 'Type', 'Present Days', 'Total Wage (in RS)']],
+    body: tableData,
+    theme: 'grid',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+    },
+    headStyles: {
+      fillColor: [41, 128, 185],
+      textColor: 255,
+      halign: 'center',
+    },
+    bodyStyles: {
+      halign: 'center',
+    },
+    columnStyles: {
+      0: { halign: 'left' },
+    },
+    didDrawPage: (data) => {
+      /* ---------- FOOTER (PAGE NUMBER) ---------- */
+      const pageCount = doc.getNumberOfPages();
+      doc.setFontSize(9);
+      doc.setTextColor(120);
+      doc.text(
+        `Page ${pageCount}`,
+        pageWidth / 2,
+        doc.internal.pageSize.height - 10,
+        { align: 'center' }
+      );
+    },
+  });
+
+  /* ---------- SAVE ---------- */
+
+  doc.save(`wage-report-${format(new Date(), 'yyyy-MM')}.pdf`);
   };
+
+
+  
 
   /** Export all data to CSV */
-  const exportAllData = async () => {
-    if (!company) return;
+const exportAllData = async () => {
 
-    const { data: employees } = await supabase.from<Employee>('employee').select('*').eq('company_id', company.company_id);
-    const { data: attendance } = await supabase.from<Attendance>('attendance').select('*').eq('company_id', company.company_id);
+  if (!company) return;
 
-    // Convert to CSV string
-    const csvHeader = [
-      'Employee Name,Employee ID,Mobile,Status,Date,Marked By,Company ID'
-    ];
-    const csvRows: string[] = [];
+  const { data: employees } = await supabase
+    .from<Employee>('employee')
+    .select('*')
+    .eq('company_id', company.company_id);
 
-    attendance?.forEach(a => {
-      const emp = employees?.find(e => e.employee_id === a.employee_id);
-      if (emp) {
-        csvRows.push(`${emp.full_name},${emp.employee_id},${emp.mobile},${a.status},${a.date},${a.marked_by_owner || a.marked_by_supervisor},${a.company_id}`);
-      }
-    });
+  const { data: attendance } = await supabase
+    .from<Attendance>('attendance')
+    .select('*')
+    .eq('company_id', company.company_id);
 
-    const csvContent = [csvHeader, ...csvRows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
+  if (!employees || !attendance) return;
 
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `all-data-${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+
+  /* ----------- CALCULATE TOTAL PAYABLE PER EMPLOYEE ----------- */
+
+  const daysInMonth = new Date(
+  new Date().getFullYear(),
+  new Date().getMonth() + 1,
+  0
+).getDate();
+
+  /* ---------------- CSV HEADER ---------------- */
+
+  const csvHeader = [
+    [
+      'Employee Name',
+      'Mobile',
+      'Employment Type',
+      'Status',
+      'Date',
+      'Work Hours',
+      'Daily Rate/Salary',
+      'Calculated Wage',
+      'Total (Cumulative)',
+      'Marked By',
+      'Company Name'
+    ].join(',')
+  ];
+
+  const csvRows: string[] = [];
+
+  const attendanceByEmployee = new Map<string, Attendance[]>();
+
+attendance.forEach(a => {
+  if (!attendanceByEmployee.has(a.employee_id)) {
+    attendanceByEmployee.set(a.employee_id, []);
+  }
+  attendanceByEmployee.get(a.employee_id)!.push(a);
+});
+
+
+const employeeTotalPay = new Map<string, number>();
+
+attendanceByEmployee.forEach((empAttendance, employeeId) => {
+  const emp = employees.find(e => e.employee_id === employeeId);
+  if (!emp) return;
+
+  let totalPay = 0;
+
+  /* ---------- FIXED SALARY ---------- */
+  if (emp.employment_type === 'FIXED' && emp.monthly_salary) {
+    const daysInMonth = 30; // or calculate dynamically
+    const presentDays = empAttendance.filter(a => a.status === 'P').length;
+    const absentDays = daysInMonth - presentDays;
+
+    if (presentDays === 0) {
+      totalPay = 0;
+    } else {
+      const dailyRate = emp.monthly_salary / daysInMonth;
+      // const deductions = dailyRate * absentDays;
+      totalPay = dailyRate;
+    }
+  }
+
+  /* ---------- DAILY WAGE ---------- */
+  if (emp.employment_type === 'DAILY' && emp.daily_rate) {
+    const hourlyRate = emp.daily_rate / 8;
+
+    totalPay = empAttendance.reduce((sum, record) => {
+      const hours = record.work_hours ?? 0;
+      return sum + hours * hourlyRate;
+    }, 0);
+  }
+
+  employeeTotalPay.set(employeeId, totalPay);
+});
+
+const { data: owner, error: ownerError } = await supabase
+  .from('owner')
+  .select('full_name')
+  .eq('owner_id', user.id)
+  .single();
+
+
+  /* ---------------- CSV ROWS ---------------- */
+const employeeRunningTotal = new Map<string, number>();
+
+attendance.forEach(a => {
+  const emp = employees.find(e => e.employee_id === a.employee_id);
+  if (!emp) return;
+
+  let calculatedWage = 0;
+
+  if (emp.employment_type === 'DAILY' && emp.daily_rate) {
+    const hours = a.work_hours ?? 0;
+    calculatedWage = (emp.daily_rate / 8) * hours;
+  }
+
+  if (emp.employment_type === 'FIXED' && emp.monthly_salary) {
+    // show 0 per day, total shown separately
+    const dailyRate = emp.monthly_salary / daysInMonth; // or dynamic days
+    calculatedWage = a.status === 'P' ? dailyRate : 0;  }
+
+  const prevTotal = employeeRunningTotal.get(emp.employee_id) ?? 0;
+  const newTotal = prevTotal + calculatedWage;
+    employeeRunningTotal.set(emp.employee_id, newTotal);
+
+
+  employeeRunningTotal.set(emp.employee_id, newTotal);
+
+  csvRows.push([
+    emp.full_name,
+    emp.mobile,
+    emp.employment_type,
+    a.status,
+    a.date,
+    a.work_hours ?? 0,
+    emp.employment_type === 'DAILY'
+      ? emp.daily_rate
+      : emp.monthly_salary,
+    calculatedWage.toFixed(2),
+    newTotal.toFixed(2),
+    owner.full_name,
+    company.company_name
+  ].join(','));
+});
+
+
+  /* ---------------- DOWNLOAD CSV ---------------- */
+
+  const csvContent = [...csvHeader, ...csvRows].join('\n');
+  const blob = new Blob([csvContent], {
+    type: 'text/csv;charset=utf-8;',
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  link.href = url;
+  link.setAttribute(
+    'download',
+    `attendance-wage-report-${format(new Date(), 'yyyy-MM-dd')}.csv`
+  );
+
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 
   return (
     <div className="space-y-6">

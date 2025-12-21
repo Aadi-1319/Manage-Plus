@@ -82,6 +82,7 @@ export interface Attendance {
   company_id: string;
   in_time?: string;
   out_time?: string;
+  work_hours?: number
 }
 
 export interface PayHistory {

@@ -22,7 +22,7 @@ const Attendance: React.FC = () => {
   const dateStr = format(date, 'yyyy-MM-dd');
 
   const DEFAULT_IN_TIME = '10:00';
-const DEFAULT_OUT_TIME = '17:00';
+const DEFAULT_OUT_TIME = '18:00';
 
 
   useEffect(() => {

@@ -113,24 +113,44 @@ const MonthlyReportDialog: React.FC<MonthlyReportDialogProps> = ({
         a => a.employee_id === emp.employee_id
       );
 
-      const presentDays = empAttendance.filter(a => a.status === 'P').length;
-      const absentDays = empAttendance.filter(a => a.status === 'A').length;
+      const hasAttendance = empAttendance.length > 0;
+
+const presentDays = hasAttendance
+  ? empAttendance.filter(a => a.status === 'P').length
+  : 0;
+
+const absentDays = hasAttendance
+  ? empAttendance.filter(a => a.status === 'A').length
+  : 0;
 
       let calculatedWage = 0;
       let deductions = 0;
       let finalPay = 0;
 
-      if (emp.employment_type === 'FIXED' && emp.monthly_salary) {
-        const dailyRate = emp.monthly_salary / daysInMonth;
-        deductions = dailyRate * absentDays;
-        calculatedWage = emp.monthly_salary;
-        finalPay = calculatedWage - deductions;
-      }
+      if (!hasAttendance) {
+  // 🚨 No attendance = No pay
+  calculatedWage = 0;
+  deductions = 0;
+  finalPay = 0;
+} else {
+  if (emp.employment_type === 'FIXED' && emp.monthly_salary) {
+    const dailyRate = emp.monthly_salary / daysInMonth;
+    deductions = dailyRate * absentDays;
+    finalPay = dailyRate - deductions;
+  }
 
-      if (emp.employment_type === 'DAILY' && emp.daily_rate) {
-        calculatedWage = emp.daily_rate * presentDays;
-        finalPay = calculatedWage;
-      }
+ if (emp.employment_type === 'DAILY' && emp.daily_rate) {
+  const hourlyRate = emp.daily_rate / 8; // standard 8-hour day
+
+  calculatedWage = empAttendance.reduce((sum, record) => {
+    const hours = record.work_hours ?? 0;
+    return sum + hours * hourlyRate;
+  }, 0);
+
+  finalPay = calculatedWage;
+}
+
+}
 
       return {
         employee: emp,
